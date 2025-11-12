@@ -1,0 +1,43 @@
+# Environment secrets
+.env
+.env.*
+*.env.local
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Build & packaging
+build/
+dist/
+*.egg-info/
+
+# Docker/compose outputs
+docker-compose.yml
+docker-compose.override.yml
+compose/override*.yml
+
+# Generated media stack data
+config/
+data/
+logs/
+tmp/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# CLI helper caches
+.cache/
+
