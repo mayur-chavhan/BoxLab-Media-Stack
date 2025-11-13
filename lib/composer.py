@@ -1,7 +1,13 @@
+"""
+Docker Compose file generator for BoxLab services.
+Creates service definitions dynamically based on user selections.
+"""
 import os
 
 
-class ContainerConfig:
+class ComposeBuilder:
+    """Builds Docker Compose service definitions."""
+    
     def __init__(self,
                  root_dir,
                  timezone,
@@ -13,16 +19,9 @@ class ContainerConfig:
         self.timezone = timezone
         self.config_dir = root_dir + '/config'
         self.plex_claim = plex_claim
-        self.movie_dir = root_dir + '/media/movies'
-        self.tv_dir = root_dir + '/media/tv'
-        self.music_dir = root_dir + '/media/music'
-        self.book_dir = root_dir + '/media/books'
-        self.comic_dir = root_dir + '/media/comics'
         self.torrent_dir = root_dir + '/data/torrents'
         self.usenet_dir = root_dir + '/data/usenet'
         self.homarr_dir = root_dir + '/data/homarr/appdata'
-        self.temp_download_dir = root_dir + '/data/temp_downloads'
-        self.transcode_cache_dir = root_dir + '/data/transcode'
         self.wizarr_cache_dir = root_dir + '/data/wizarr-cache'
         self.jellystat_data_dir = root_dir + '/data/jellystat'
         self.jellystat_backup_dir = self.jellystat_data_dir + '/postgres-backup'
@@ -254,7 +253,7 @@ class ContainerConfig:
         )
 
     def homarr(self):
-        key = os.urandom(32).hex()  # Because os.urandom(32) generates 32 random bytes, and .hex() converts each byte into two hexadecimal characters.
+        key = os.urandom(32).hex()
         return (
             '  homarr:\n'
             '    image: ghcr.io/homarr-labs/homarr:latest\n'

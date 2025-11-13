@@ -14,6 +14,20 @@ __pycache__/
 .venv/
 venv/
 
+openspec/
+.kilocode/
+.roo/
+.cli/
+.windsurf/
+.kiro/
+.qoder/
+.augment/
+.bechmarks/
+.opencode/
+tests/
+CLAUDE.md
+LICENSE.md
+
 # Build & packaging
 build/
 dist/
@@ -41,3 +55,13 @@ Thumbs.db
 # CLI helper caches
 .cache/
 
+# Legacy/archived code
+archive/
+.clinerules/byterover-rules.md
+.kilocode/rules/byterover-rules.md
+.roo/rules/byterover-rules.md
+.windsurf/rules/byterover-rules.md
+.cursor/rules/byterover-rules.mdc
+.kiro/steering/byterover-rules.md
+.qoder/rules/byterover-rules.md
+.augment/rules/byterover-rules.md

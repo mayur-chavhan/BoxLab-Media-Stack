@@ -2,20 +2,20 @@
 """
 BoxLab Media Server Stack Installer
 A beautiful TUI for setting up your self-hosted media automation stack.
-
-This file maintains backward compatibility. Use './boxlab' for the new entry point.
 """
 import os
 import sys
 from pathlib import Path
 
-# Support both old (src/boxlab) and new (lib/) structures
+# Resolve project paths
 PROJECT_ROOT = Path(__file__).parent
 
+# Add bin directory to PATH for Gum binary
 BIN_DIR = PROJECT_ROOT / "bin"
 BIN_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["PATH"] = f"{BIN_DIR}{os.pathsep}{os.environ.get('PATH', '')}"
 
+# Ensure Gum binary is present before launching CLI
 try:
     from lib.setup import GumSetupError, ensure_gum_binary
 except ImportError as exc:
@@ -28,24 +28,21 @@ else:
         print(f"❌ {exc}")
         sys.exit(1)
 
+# Import and run the CLI
 try:
     from lib.cli import run_cli
-except ImportError:
-    try:
-        from boxlab.workflow import run_cli  # type: ignore
-    except ImportError:
-        print("Error: Could not find CLI module in lib/ or src/boxlab/")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    try:
+    
+    if __name__ == "__main__":
         run_cli()
-    except KeyboardInterrupt:
-        print("\n\nSetup interrupted by user. Goodbye!")
-        sys.exit(0)
-    except Exception as e:
-        print(f"\n❌ An unexpected error occurred: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+except ImportError as e:
+    print(f"Error: Failed to import required modules: {e}")
+    print("Make sure all lib files are present in the lib/ directory.")
+    sys.exit(1)
+except KeyboardInterrupt:
+    print("\n\nSetup interrupted by user. Goodbye!")
+    sys.exit(0)
+except Exception as e:
+    print(f"\n❌ An unexpected error occurred: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
