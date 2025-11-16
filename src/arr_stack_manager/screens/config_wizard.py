@@ -1638,7 +1638,7 @@ class ConfigWizardScreen(Screen):
     @on(Button.Pressed, "#continue-button")
     def handle_continue_button(self) -> None:
         """Handle continue button press."""
-        logger.info("Continue button pressed")
+        logger.info(f"Continue button pressed on step {self._current_step}")
         self._go_to_next_step()
 
     @on(Button.Pressed, "#detect-timezone")
