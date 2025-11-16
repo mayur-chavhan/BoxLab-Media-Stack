@@ -1,0 +1,25 @@
+{#
+  Prowlarr - Indexer Manager
+  Trash-Guides compliant configuration
+  https://trash-guides.info/Prowlarr/
+#}
+  prowlarr:
+    image: {{ services.prowlarr.image | default('lscr.io/linuxserver/prowlarr:latest') }}
+    container_name: prowlarr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+    volumes:
+      # Config directory
+      - {{ config_path }}/prowlarr:/config
+    ports:
+      - {{ services.prowlarr.port | default(9696) }}:9696
+    restart: unless-stopped
+{% if services.prowlarr.depends_on %}
+    depends_on:
+{% for dependency in services.prowlarr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

@@ -1,0 +1,38 @@
+{#
+  Jellyfin - Open-source Media Server
+#}
+  jellyfin:
+    image: {{ services.jellyfin.image | default('lscr.io/linuxserver/jellyfin:latest') }}
+    container_name: jellyfin
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+    volumes:
+      # Config directory
+      - {{ config_path }}/jellyfin:/config
+      # Media library (read-only recommended for safety)
+      - {{ data_path }}/media:/data/media:ro
+{% if services.jellyfin.cache_path %}
+      # Optional: Cache directory for transcoding
+      - {{ services.jellyfin.cache_path }}:/cache
+{% endif %}
+    ports:
+      - {{ services.jellyfin.port | default(8096) }}:8096
+      - 8920:8920  # HTTPS
+      - 7359:7359/udp  # Service discovery
+      - 1900:1900/udp  # DLNA
+    restart: unless-stopped
+{% if services.jellyfin.devices %}
+    devices:
+{% for device in services.jellyfin.devices %}
+      - {{ device }}
+{% endfor %}
+{% endif %}
+{% if services.jellyfin.depends_on %}
+    depends_on:
+{% for dependency in services.jellyfin.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

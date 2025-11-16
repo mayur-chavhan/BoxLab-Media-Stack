@@ -1,0 +1,22 @@
+{#
+  Autobrr - Torrent Automation
+#}
+  autobrr:
+    image: {{ services.autobrr.image | default('ghcr.io/autobrr/autobrr:latest') }}
+    container_name: autobrr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      # Config directory
+      - {{ config_path }}/autobrr:/config
+    ports:
+      - {{ services.autobrr.port | default(7474) }}:7474
+    restart: unless-stopped
+{% if services.autobrr.depends_on %}
+    depends_on:
+{% for dependency in services.autobrr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

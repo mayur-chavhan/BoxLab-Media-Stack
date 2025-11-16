@@ -1,0 +1,27 @@
+{#
+  Bazarr - Subtitle Management
+  Trash-Guides compliant configuration
+  https://trash-guides.info/Bazarr/
+#}
+  bazarr:
+    image: {{ services.bazarr.image | default('lscr.io/linuxserver/bazarr:latest') }}
+    container_name: bazarr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+    volumes:
+      # Config directory
+      - {{ config_path }}/bazarr:/config
+      # Single data mount point for hardlinks (Trash-Guides best practice)
+      - {{ data_path }}:/data
+    ports:
+      - {{ services.bazarr.port | default(6767) }}:6767
+    restart: unless-stopped
+{% if services.bazarr.depends_on %}
+    depends_on:
+{% for dependency in services.bazarr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

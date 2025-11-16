@@ -1,0 +1,35 @@
+{#
+  Unpackerr - Archive Extraction
+#}
+  unpackerr:
+    image: {{ services.unpackerr.image | default('golift/unpackerr:latest') }}
+    container_name: unpackerr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+      # Unpackerr configuration
+      - UN_DEBUG=false
+      - UN_LOG_FILE=/config/unpackerr.log
+      - UN_LOG_FILES=10
+      - UN_LOG_FILE_MB=10
+      - UN_INTERVAL=2m
+      - UN_START_DELAY=1m
+      - UN_RETRY_DELAY=5m
+      - UN_MAX_RETRIES=3
+      - UN_PARALLEL=1
+      - UN_FILE_MODE=0644
+      - UN_DIR_MODE=0755
+    volumes:
+      # Config directory
+      - {{ config_path }}/unpackerr:/config
+      # Data directory for extraction
+      - {{ data_path }}:/data
+    restart: unless-stopped
+{% if services.unpackerr.depends_on %}
+    depends_on:
+{% for dependency in services.unpackerr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

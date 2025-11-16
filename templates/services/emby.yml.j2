@@ -1,0 +1,32 @@
+{#
+  Emby - Media Server (Proprietary)
+#}
+  emby:
+    image: {{ services.emby.image | default('lscr.io/linuxserver/emby:latest') }}
+    container_name: emby
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+    volumes:
+      # Config directory
+      - {{ config_path }}/emby:/config
+      # Media library (read-only recommended for safety)
+      - {{ data_path }}/media:/data/media:ro
+    ports:
+      - {{ services.emby.port | default(8096) }}:8096
+      - 8920:8920  # HTTPS
+    restart: unless-stopped
+{% if services.emby.devices %}
+    devices:
+{% for device in services.emby.devices %}
+      - {{ device }}
+{% endfor %}
+{% endif %}
+{% if services.emby.depends_on %}
+    depends_on:
+{% for dependency in services.emby.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

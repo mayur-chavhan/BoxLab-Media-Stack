@@ -1,0 +1,27 @@
+{#
+  Sonarr - TV Show Automation
+  Trash-Guides compliant configuration
+  https://trash-guides.info/Sonarr/
+#}
+  sonarr:
+    image: {{ services.sonarr.image | default('lscr.io/linuxserver/sonarr:latest') }}
+    container_name: sonarr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+    volumes:
+      # Config directory
+      - {{ config_path }}/sonarr:/config
+      # Single data mount point for hardlinks (Trash-Guides best practice)
+      - {{ data_path }}:/data
+    ports:
+      - {{ services.sonarr.port | default(8989) }}:8989
+    restart: unless-stopped
+{% if services.sonarr.depends_on %}
+    depends_on:
+{% for dependency in services.sonarr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

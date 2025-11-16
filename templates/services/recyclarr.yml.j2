@@ -1,0 +1,21 @@
+{#
+  Recyclarr - TRaSH-Guides Sync Automation
+  https://trash-guides.info/Recyclarr/
+#}
+  recyclarr:
+    image: {{ services.recyclarr.image | default('ghcr.io/recyclarr/recyclarr:latest') }}
+    container_name: recyclarr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+    volumes:
+      # Config directory
+      - {{ config_path }}/recyclarr:/config
+    restart: unless-stopped
+{% if services.recyclarr.depends_on %}
+    depends_on:
+{% for dependency in services.recyclarr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

@@ -1,0 +1,27 @@
+{#
+  Jackett - Indexer Proxy (Legacy)
+  Note: Prowlarr is recommended over Jackett for new installations
+#}
+  jackett:
+    image: {{ services.jackett.image | default('lscr.io/linuxserver/jackett:latest') }}
+    container_name: jackett
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+      - AUTO_UPDATE=true
+    volumes:
+      # Config directory
+      - {{ config_path }}/jackett:/config
+      # Downloads directory for blackhole
+      - {{ data_path }}/downloads:/downloads
+    ports:
+      - {{ services.jackett.port | default(9117) }}:9117
+    restart: unless-stopped
+{% if services.jackett.depends_on %}
+    depends_on:
+{% for dependency in services.jackett.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

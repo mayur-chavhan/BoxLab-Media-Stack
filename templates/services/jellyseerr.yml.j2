@@ -1,0 +1,21 @@
+{#
+  Jellyseerr - Request Management for Jellyfin
+#}
+  jellyseerr:
+    image: {{ services.jellyseerr.image | default('fallenbagel/jellyseerr:latest') }}
+    container_name: jellyseerr
+    environment:
+      - LOG_LEVEL=info
+      - TZ={{ timezone }}
+    volumes:
+      # Config directory
+      - {{ config_path }}/jellyseerr:/app/config
+    ports:
+      - {{ services.jellyseerr.port | default(5055) }}:5055
+    restart: unless-stopped
+{% if services.jellyseerr.depends_on %}
+    depends_on:
+{% for dependency in services.jellyseerr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

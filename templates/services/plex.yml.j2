@@ -1,0 +1,48 @@
+{#
+  Plex - Media Server (Requires Account)
+#}
+  plex:
+    image: {{ services.plex.image | default('lscr.io/linuxserver/plex:latest') }}
+    container_name: plex
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - VERSION=docker
+{% if services.plex.claim_token %}
+      - PLEX_CLAIM={{ services.plex.claim_token }}
+{% endif %}
+    volumes:
+      # Config directory
+      - {{ config_path }}/plex:/config
+      # Media library (read-only recommended for safety)
+      - {{ data_path }}/media:/data/media:ro
+{% if services.plex.transcode_path %}
+      # Transcode directory (recommended: fast storage)
+      - {{ services.plex.transcode_path }}:/transcode
+{% endif %}
+    ports:
+      - {{ services.plex.port | default(32400) }}:32400
+      - 1900:1900/udp  # DLNA
+      - 3005:3005  # Plex Companion
+      - 5353:5353/udp  # Bonjour/Avahi
+      - 8324:8324  # Roku
+      - 32410:32410/udp  # GDM network discovery
+      - 32412:32412/udp  # GDM network discovery
+      - 32413:32413/udp  # GDM network discovery
+      - 32414:32414/udp  # GDM network discovery
+      - 32469:32469  # DLNA
+    restart: unless-stopped
+    network_mode: host
+{% if services.plex.devices %}
+    devices:
+{% for device in services.plex.devices %}
+      - {{ device }}
+{% endfor %}
+{% endif %}
+{% if services.plex.depends_on %}
+    depends_on:
+{% for dependency in services.plex.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

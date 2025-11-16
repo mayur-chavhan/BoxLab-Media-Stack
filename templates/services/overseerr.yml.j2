@@ -1,0 +1,23 @@
+{#
+  Overseerr - Request Management for Plex
+#}
+  overseerr:
+    image: {{ services.overseerr.image | default('lscr.io/linuxserver/overseerr:latest') }}
+    container_name: overseerr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - LOG_LEVEL=info
+    volumes:
+      # Config directory
+      - {{ config_path }}/overseerr:/config
+    ports:
+      - {{ services.overseerr.port | default(5055) }}:5055
+    restart: unless-stopped
+{% if services.overseerr.depends_on %}
+    depends_on:
+{% for dependency in services.overseerr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}

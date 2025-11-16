@@ -1,0 +1,43 @@
+{#
+  Tdarr - Transcoding Automation
+#}
+  tdarr:
+    image: {{ services.tdarr.image | default('ghcr.io/haveagitgat/tdarr:latest') }}
+    container_name: tdarr
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - UMASK=002
+      - serverIP=0.0.0.0
+      - serverPort=8266
+      - webUIPort=8265
+    volumes:
+      # Server data
+      - {{ config_path }}/tdarr/server:/app/server
+      # Config directory
+      - {{ config_path }}/tdarr/configs:/app/configs
+      # Logs
+      - {{ config_path }}/tdarr/logs:/app/logs
+      # Media data for transcoding
+      - {{ data_path }}:/data
+{% if services.tdarr.transcode_cache %}
+      # Transcode cache (recommended: fast storage like SSD)
+      - {{ services.tdarr.transcode_cache }}:/temp
+{% endif %}
+    ports:
+      - {{ services.tdarr.port | default(8265) }}:8265  # Web UI
+      - 8266:8266  # Server port
+    restart: unless-stopped
+{% if services.tdarr.devices %}
+    devices:
+{% for device in services.tdarr.devices %}
+      - {{ device }}
+{% endfor %}
+{% endif %}
+{% if services.tdarr.depends_on %}
+    depends_on:
+{% for dependency in services.tdarr.depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}
