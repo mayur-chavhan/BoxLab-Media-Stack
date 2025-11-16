@@ -520,11 +520,16 @@ class StackManagerApp(App):
 
     def action_goto_config(self) -> None:
         """Navigate to the configuration wizard."""
-        # Get currently selected services if available
-        selected_services = []
+        # If we have a current stack, go to config wizard with that configuration
         if self.controller.current_stack:
-            selected_services = self.controller.current_stack.configuration.get_selected_services()
-        self.controller.navigate_to(ScreenType.CONFIG_WIZARD, selected_services=selected_services)
+            self.controller.navigate_to(
+                ScreenType.CONFIG_WIZARD,
+                configuration=self.controller.current_stack.configuration
+            )
+        else:
+            # No stack configured, start with service selector
+            logger.info("No stack configured, redirecting to service selector")
+            self.controller.navigate_to(ScreenType.SERVICE_SELECTOR)
 
     def action_goto_manager(self) -> None:
         """Navigate to the stack manager."""
