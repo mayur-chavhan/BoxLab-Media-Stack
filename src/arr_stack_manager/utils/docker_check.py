@@ -273,3 +273,62 @@ def fix_docker_permissions() -> bool:
     except Exception as e:
         logger.error(f"Failed to fix Docker permissions: {e}")
         return False
+
+
+def offer_sudo_restart() -> bool:
+    """
+    Offer to restart the application with sudo.
+
+    Returns:
+        True if the application was restarted with sudo, False otherwise
+    """
+    # Check if sudo is available
+    try:
+        result = subprocess.run(
+            ["which", "sudo"],
+            capture_output=True,
+            timeout=2,
+        )
+        if result.returncode != 0:
+            return False
+    except Exception:
+        return False
+
+    print("\n" + "=" * 70)
+    print("QUICK FIX: Restart with sudo")
+    print("=" * 70)
+    print("\nWould you like to restart this application with sudo?")
+    print("This will give the app temporary access to Docker.")
+    print("\nOptions:")
+    print("  [Y] Yes - Restart with sudo now")
+    print("  [N] No  - Exit and fix permissions manually")
+    print("=" * 70)
+
+    try:
+        response = input("\nYour choice [Y/n]: ").strip().lower()
+
+        if response in ["y", "yes", ""]:
+            print("\nRestarting with sudo...")
+            print("You may be prompted for your password.\n")
+
+            # Get the current command
+            import sys
+
+            # Reconstruct the command with sudo
+            sudo_cmd = ["sudo"] + sys.argv
+
+            # Execute with sudo
+            try:
+                os.execvp("sudo", sudo_cmd)
+                # If we get here, exec failed
+                return False
+            except Exception as e:
+                print(f"\nFailed to restart with sudo: {e}")
+                return False
+        else:
+            print("\nExiting. Please fix Docker permissions manually.")
+            return False
+
+    except (KeyboardInterrupt, EOFError):
+        print("\n\nCancelled by user.")
+        return False

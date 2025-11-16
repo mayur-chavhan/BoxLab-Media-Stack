@@ -145,6 +145,7 @@ def main() -> None:
     from arr_stack_manager.utils.docker_check import (
         check_docker_prerequisites,
         print_docker_check_result,
+        offer_sudo_restart,
     )
 
     docker_check = check_docker_prerequisites()
@@ -152,6 +153,13 @@ def main() -> None:
     if not docker_check.is_ready:
         print_docker_check_result(docker_check)
         logger.error("Docker prerequisites check failed")
+        
+        # If it's a permission issue and user has sudo, offer to restart with sudo
+        if not docker_check.has_permission and not docker_check.is_root:
+            if offer_sudo_restart():
+                # User chose to restart with sudo
+                sys.exit(0)
+        
         sys.exit(1)
 
     logger.info("Docker prerequisites check passed")
