@@ -221,7 +221,7 @@ class StackStatusOverview(Static):
     def _format_status_indicator(self) -> str:
         """Format the status indicator text."""
         if not self.stack_status:
-            return "● No Stack"
+            return "○ No Stack"
 
         if self.stack_status.is_healthy:
             return f"● Running ({self.stack_status.running_services}/{self.stack_status.total_services})"
@@ -317,7 +317,13 @@ class DashboardScreen(Screen):
         color: $text-muted;
         text-style: italic;
         content-align: center middle;
-        height: 100%;
+        height: auto;
+        margin: 1;
+    }
+
+    DashboardScreen #create-stack-button {
+        margin: 2 auto;
+        width: 30;
     }
 
     DashboardScreen .activity-section {
@@ -446,11 +452,26 @@ class DashboardScreen(Screen):
         """Show message when no stack is configured."""
         services_list = self.query_one("#services-list", ScrollableContainer)
         services_list.remove_children()
+        
+        # Create a container with message and button
         services_list.mount(
             Label(
-                "No stack configured. Press 's' to select services.",
+                "No stack configured yet.",
                 classes="no-services",
                 id="no-stack-message",
+            )
+        )
+        services_list.mount(
+            Label(
+                "Get started by creating your first stack:",
+                classes="no-services",
+            )
+        )
+        services_list.mount(
+            Button(
+                "Create New Stack",
+                id="create-stack-button",
+                variant="primary",
             )
         )
 
@@ -612,6 +633,13 @@ class DashboardScreen(Screen):
         # TODO: Show help screen
         logger.info("Help requested")
 
+    @on(Button.Pressed, "#create-stack-button")
+    def handle_create_stack(self) -> None:
+        """Handle create stack button press."""
+        logger.info("Create stack button pressed")
+        from arr_stack_manager.controller import ScreenType
+        self.controller.navigate_to(ScreenType.SERVICE_SELECTOR)
+
     def action_quit(self) -> None:
         """Quit the application."""
         self._auto_refresh_enabled = False
@@ -619,18 +647,30 @@ class DashboardScreen(Screen):
 
     def action_services(self) -> None:
         """Navigate to services screen."""
-        # TODO: Navigate to service selector
         logger.info("Navigate to services requested")
+        from arr_stack_manager.controller import ScreenType
+        self.controller.navigate_to(ScreenType.SERVICE_SELECTOR)
 
     def action_config(self) -> None:
         """Navigate to configuration screen."""
-        # TODO: Navigate to configuration wizard
         logger.info("Navigate to config requested")
+        from arr_stack_manager.controller import ScreenType
+        # If we have a current stack, use its configuration
+        if self.controller.current_stack:
+            self.controller.navigate_to(
+                ScreenType.CONFIG_WIZARD,
+                configuration=self.controller.current_stack.configuration
+            )
+        else:
+            # No stack, start with service selector
+            self.controller.navigate_to(ScreenType.SERVICE_SELECTOR)
 
     def action_help(self) -> None:
         """Show help screen."""
-        # TODO: Show help screen
         logger.info("Help action triggered")
+        # Push help screen from the app
+        from arr_stack_manager.app import HelpScreen
+        self.app.push_screen(HelpScreen())
 
     def action_refresh(self) -> None:
         """Manually refresh the dashboard."""
