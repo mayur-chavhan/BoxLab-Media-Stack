@@ -141,6 +141,25 @@ def main() -> None:
     logger = logging.getLogger(__name__)
     logger.info(f"Starting arr Stack Manager v{__version__}")
 
+    # Check Docker prerequisites before starting
+    from arr_stack_manager.utils.docker_check import (
+        check_docker_prerequisites,
+        print_docker_check_result,
+    )
+
+    docker_check = check_docker_prerequisites()
+
+    if not docker_check.is_ready:
+        print_docker_check_result(docker_check)
+        logger.error("Docker prerequisites check failed")
+        sys.exit(1)
+
+    logger.info("Docker prerequisites check passed")
+    if docker_check.is_root:
+        logger.warning("Running as root user")
+    elif docker_check.in_docker_group:
+        logger.info("User is in docker group")
+
     # Log configuration
     if args.config_dir:
         logger.info(f"Using custom config directory: {args.config_dir}")
