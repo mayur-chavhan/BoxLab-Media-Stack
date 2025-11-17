@@ -13,6 +13,7 @@ from arr_stack_manager.models.configuration import Configuration
 from arr_stack_manager.models.service import ServiceInfo, ServiceStatus
 from arr_stack_manager.models.stack import StackConfig, StackStatus
 from arr_stack_manager.models.validation import ValidationResult
+from arr_stack_manager.utils.env_loader import EnvironmentLoader
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class AppController:
         self._validator = ConfigurationValidator()
         self._generator = ComposeGenerator(template_dir)
         self._docker_manager = DockerManager()
+        self._env_loader = EnvironmentLoader()
 
         # Application state
         self._current_screen: ScreenType | None = None
@@ -93,8 +95,21 @@ class AppController:
             logger.info(f"Found {len(existing_stacks)} existing stack(s): {existing_stacks}")
         else:
             logger.info("No existing stacks found - first run")
+            # Generate .env.example on first run if it doesn't exist
+            self._generate_env_example_if_needed()
 
         logger.info("Application initialization complete")
+
+    def _generate_env_example_if_needed(self) -> None:
+        """Generate .env.example file on first run if it doesn't exist."""
+        env_example_path = Path.cwd() / ".env.example"
+        
+        if not env_example_path.exists():
+            try:
+                self._env_loader.generate_example_file(env_example_path)
+                logger.info(f"Generated .env.example file at: {env_example_path}")
+            except Exception as e:
+                logger.warning(f"Failed to generate .env.example: {e}")
 
     def is_first_run(self) -> bool:
         """
@@ -153,13 +168,15 @@ class AppController:
 
     def load_configuration(self, stack_name: str) -> StackConfig:
         """
-        Load a saved stack configuration.
+        Load a saved stack configuration and merge with environment variables.
+
+        Environment variables take precedence over saved configuration values.
 
         Args:
             stack_name: Name of the stack to load
 
         Returns:
-            The loaded stack configuration
+            The loaded stack configuration with environment variables merged
 
         Raises:
             FileNotFoundError: If the configuration doesn't exist
@@ -169,8 +186,14 @@ class AppController:
 
         try:
             stack_config = self._config_repo.load(stack_name)
+            
+            # Merge environment variables into configuration
+            merged_config = stack_config.configuration.merge_with_env(self._env_loader)
+            stack_config.configuration = merged_config
+            
             self._current_stack = stack_config
             logger.info(f"Successfully loaded stack configuration: {stack_name}")
+            logger.debug("Environment variables merged into configuration")
             return stack_config
         except FileNotFoundError:
             logger.error(f"Stack configuration not found: {stack_name}")
@@ -199,6 +222,96 @@ class AppController:
         except (IOError, ValueError) as e:
             logger.error(f"Failed to save stack configuration: {e}")
             raise
+
+    def get_env_defaults(self) -> dict[str, Any]:
+        """
+        Get default configuration values from environment variables.
+
+        This method is useful for pre-filling wizard forms with environment values.
+
+        Returns:
+            Dictionary containing environment variable values for configuration
+        """
+        logger.debug("Getting environment defaults for configuration")
+        
+        env_vars = self._env_loader.get_all()
+        
+        defaults = {}
+        
+        # Map environment variables to configuration fields
+        if "PUID" in env_vars:
+            defaults["puid"] = env_vars["PUID"]
+        
+        if "PGID" in env_vars:
+            defaults["pgid"] = env_vars["PGID"]
+        
+        # Support both TZ and TIMEZONE
+        if "TZ" in env_vars:
+            defaults["timezone"] = env_vars["TZ"]
+        elif "TIMEZONE" in env_vars:
+            defaults["timezone"] = env_vars["TIMEZONE"]
+        
+        if "BASE_PATH" in env_vars:
+            defaults["base_path"] = env_vars["BASE_PATH"]
+        
+        if "CONFIG_PATH" in env_vars:
+            defaults["config_path"] = env_vars["CONFIG_PATH"]
+        
+        if "DATA_PATH" in env_vars:
+            defaults["data_path"] = env_vars["DATA_PATH"]
+        
+        if "STACK_NAME" in env_vars:
+            defaults["stack_name"] = env_vars["STACK_NAME"]
+        
+        logger.debug(f"Environment defaults: {list(defaults.keys())}")
+        return defaults
+
+    def load_or_create_configuration(self, stack_name: str) -> StackConfig | None:
+        """
+        Load a saved configuration or create one from environment variables.
+
+        This method attempts to:
+        1. Load saved configuration if it exists
+        2. Create configuration from environment variables if no saved config exists
+        3. Return None if neither saved config nor required env vars exist
+
+        Args:
+            stack_name: Name of the stack to load or create
+
+        Returns:
+            StackConfig if configuration exists or can be created from env, None otherwise
+        """
+        logger.info(f"Loading or creating configuration for stack: {stack_name}")
+        
+        # Try to load saved configuration first
+        try:
+            return self.load_configuration(stack_name)
+        except FileNotFoundError:
+            logger.info(f"No saved configuration found for stack: {stack_name}")
+        
+        # Try to create from environment variables
+        try:
+            logger.info("Attempting to create configuration from environment variables")
+            config = Configuration.from_env(self._env_loader)
+            
+            # Create a new stack config
+            from datetime import datetime
+            stack_config = StackConfig(
+                name=stack_name,
+                configuration=config,
+                compose_path="",  # Will be set during deployment
+                created_at=datetime.now(),
+                last_modified=datetime.now(),
+            )
+            
+            self._current_stack = stack_config
+            logger.info("Successfully created configuration from environment variables")
+            return stack_config
+            
+        except ValueError as e:
+            logger.info(f"Cannot create configuration from environment: {e}")
+            logger.info("User will need to use configuration wizard")
+            return None
 
     def get_stack_status(self, stack_name: str | None = None) -> StackStatus:
         """
@@ -417,6 +530,11 @@ class AppController:
     def config_repository(self) -> ConfigRepository:
         """Get the configuration repository instance."""
         return self._config_repo
+
+    @property
+    def env_loader(self) -> EnvironmentLoader:
+        """Get the environment loader instance."""
+        return self._env_loader
 
     def is_docker_available(self) -> bool:
         """
