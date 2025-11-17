@@ -127,6 +127,12 @@ For more information, visit: https://github.com/yourusername/arr-stack-manager
         help="Skip Docker availability check on startup (for testing)",
     )
 
+    parser.add_argument(
+        "--generate-env-example",
+        action="store_true",
+        help="Generate .env.example file and exit",
+    )
+
     return parser.parse_args()
 
 
@@ -134,6 +140,21 @@ def main() -> None:
     """Main entry point for the application."""
     # Parse command-line arguments
     args = parse_args()
+
+    # Handle --generate-env-example flag
+    if args.generate_env_example:
+        from arr_stack_manager.utils.env_loader import EnvironmentLoader
+        
+        loader = EnvironmentLoader()
+        output_path = Path.cwd() / ".env.example"
+        content = loader.generate_example_file(output_path)
+        
+        print(f"Generated .env.example file at: {output_path}")
+        print("\nTo use this file:")
+        print("1. Copy .env.example to .env")
+        print("2. Edit .env with your configuration values")
+        print("3. Run arr-stack-manager to use the environment configuration")
+        return
 
     # Set up logging
     setup_logging(verbose=args.verbose, log_file=args.log_file)
