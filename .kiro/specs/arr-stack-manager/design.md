@@ -1435,6 +1435,418 @@ class PortValidationStrategy(ValidationStrategy):
 3. Update UI incrementally during long operations
 4. Implement proper cancellation for user interrupts
 
+## Environment File Configuration
+
+### Overview
+
+The Stack Manager supports loading configuration values from a `.env` file in the project root or user's home directory. This allows users to customize default settings without going through the wizard each time, making it ideal for:
+
+- Automated deployments
+- Consistent configurations across environments
+- Quick reconfiguration without UI interaction
+- CI/CD integration
+
+### Supported Environment Variables
+
+```bash
+# .env.example - Environment configuration template
+
+# User and Group IDs for container processes
+# Default: Current user's UID/GID
+PUID=1000
+PGID=1000
+
+# Timezone for all services
+# Default: System timezone or UTC
+TZ=America/New_York
+
+# Base directory for all stack data
+# This is where config/ and data/ subdirectories will be created
+# Default: /opt/arr-stacks
+BASE_PATH=/mnt/storage/media-stack
+
+# Path to generated docker-compose.yml file
+# Default: ${BASE_PATH}/docker-compose.yml
+COMPOSE_FILE_PATH=/opt/arr-stacks/media-automation/docker-compose.yml
+
+# Stack name for identification
+# Default: media-automation
+STACK_NAME=my-media-stack
+
+# Docker Compose project name
+# Default: Uses stack name
+COMPOSE_PROJECT_NAME=arr-stack
+
+# Configuration directory for service configs
+# Default: ${BASE_PATH}/config
+CONFIG_PATH=/mnt/storage/media-stack/config
+
+# Data directory for media and downloads
+# Default: ${BASE_PATH}/data
+DATA_PATH=/mnt/storage/media-stack/data
+
+# Enable debug logging
+# Default: false
+DEBUG=false
+
+# Skip Docker availability check on startup (for testing)
+# Default: false
+NO_DOCKER_CHECK=false
+```
+
+### Environment File Loading Strategy
+
+The application will search for `.env` files in the following order (first found wins):
+
+1. `.env` in current working directory
+2. `.env` in project root (where docker-compose.yml will be generated)
+3. `~/.config/arr-stack-manager/.env` in user config directory
+4. System environment variables
+
+### Implementation Design
+
+#### Environment Loader Component
+
+```python
+# utils/env_loader.py
+
+from pathlib import Path
+from typing import Any, Dict, Optional
+import os
+from dotenv import load_dotenv
+
+
+class EnvironmentLoader:
+    """Load and manage environment-based configuration."""
+
+    # Supported environment variables with defaults
+    ENV_VARS = {
+        "PUID": {"type": int, "default": None, "description": "User ID for containers"},
+        "PGID": {"type": int, "default": None, "description": "Group ID for containers"},
+        "TZ": {"type": str, "default": "UTC", "description": "Timezone"},
+        "BASE_PATH": {"type": str, "default": "/opt/arr-stacks", "description": "Base directory"},
+        "COMPOSE_FILE_PATH": {"type": str, "default": None, "description": "Compose file path"},
+        "STACK_NAME": {"type": str, "default": "media-automation", "description": "Stack name"},
+        "COMPOSE_PROJECT_NAME": {"type": str, "default": None, "description": "Docker project name"},
+        "CONFIG_PATH": {"type": str, "default": None, "description": "Config directory"},
+        "DATA_PATH": {"type": str, "default": None, "description": "Data directory"},
+        "DEBUG": {"type": bool, "default": False, "description": "Enable debug logging"},
+        "NO_DOCKER_CHECK": {"type": bool, "default": False, "description": "Skip Docker check"},
+    }
+
+    def __init__(self, search_paths: Optional[list[Path]] = None):
+        """Initialize environment loader.
+
+        Args:
+            search_paths: Optional list of paths to search for .env files
+        """
+        self.search_paths = search_paths or self._get_default_search_paths()
+        self.env_file_path: Optional[Path] = None
+        self._load_env_file()
+
+    def _get_default_search_paths(self) -> list[Path]:
+        """Get default search paths for .env files."""
+        return [
+            Path.cwd() / ".env",
+            Path.home() / ".config" / "arr-stack-manager" / ".env",
+        ]
+
+    def _load_env_file(self) -> None:
+        """Load .env file from search paths."""
+        for path in self.search_paths:
+            if path.exists() and path.is_file():
+                load_dotenv(path)
+                self.env_file_path = path
+                break
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get environment variable value with type conversion.
+
+        Args:
+            key: Environment variable name
+            default: Default value if not found
+
+        Returns:
+            Typed value from environment or default
+        """
+        if key not in self.ENV_VARS:
+            return os.getenv(key, default)
+
+        var_config = self.ENV_VARS[key]
+        value = os.getenv(key)
+
+        if value is None:
+            return default if default is not None else var_config["default"]
+
+        # Type conversion
+        var_type = var_config["type"]
+        try:
+            if var_type == bool:
+                return value.lower() in ("true", "1", "yes", "on")
+            elif var_type == int:
+                return int(value)
+            else:
+                return value
+        except (ValueError, AttributeError):
+            return var_config["default"]
+
+    def get_all(self) -> Dict[str, Any]:
+        """Get all supported environment variables as a dictionary."""
+        return {key: self.get(key) for key in self.ENV_VARS.keys()}
+
+    def generate_example_file(self, output_path: Path) -> None:
+        """Generate .env.example file with all supported variables.
+
+        Args:
+            output_path: Path where to write the example file
+        """
+        lines = [
+            "# arr Stack Manager - Environment Configuration",
+            "# Copy this file to .env and customize the values",
+            "",
+        ]
+
+        for key, config in self.ENV_VARS.items():
+            lines.append(f"# {config['description']}")
+            default = config['default']
+            if default is not None:
+                lines.append(f"# Default: {default}")
+            lines.append(f"{key}=")
+            lines.append("")
+
+        output_path.write_text("\n".join(lines))
+
+    def has_env_file(self) -> bool:
+        """Check if an .env file was found and loaded."""
+        return self.env_file_path is not None
+
+    def get_env_file_path(self) -> Optional[Path]:
+        """Get the path to the loaded .env file."""
+        return self.env_file_path
+```
+
+#### Integration with Configuration Models
+
+Update the Configuration model to support environment variable defaults:
+
+```python
+# models/configuration.py (additions)
+
+from arr_stack_manager.utils.env_loader import EnvironmentLoader
+
+
+class Configuration(BaseModel):
+    """Main application configuration with environment variable support."""
+
+    puid: int = Field(..., description="User ID for container processes", ge=0)
+    pgid: int = Field(..., description="Group ID for container processes", ge=0)
+    timezone: str = Field(default="UTC", description="Timezone for services")
+    paths: PathConfig = Field(..., description="Path configuration")
+    services: dict[str, ServiceConfig] = Field(
+        default_factory=dict, description="Service configurations by service name"
+    )
+
+    @classmethod
+    def from_env(cls, env_loader: EnvironmentLoader) -> "Configuration":
+        """Create configuration from environment variables.
+
+        Args:
+            env_loader: Environment loader instance
+
+        Returns:
+            Configuration with values from environment
+        """
+        import os
+
+        # Get PUID/PGID with fallback to current user
+        puid = env_loader.get("PUID")
+        if puid is None:
+            puid = os.getuid()
+
+        pgid = env_loader.get("PGID")
+        if pgid is None:
+            pgid = os.getgid()
+
+        # Get paths
+        base_path = env_loader.get("BASE_PATH", "/opt/arr-stacks")
+        config_path = env_loader.get("CONFIG_PATH")
+        data_path = env_loader.get("DATA_PATH")
+
+        paths = PathConfig(
+            base_path=base_path,
+            config_path=config_path,
+            data_path=data_path,
+        )
+
+        return cls(
+            puid=puid,
+            pgid=pgid,
+            timezone=env_loader.get("TZ", "UTC"),
+            paths=paths,
+            services={},
+        )
+
+    def merge_with_env(self, env_loader: EnvironmentLoader) -> None:
+        """Merge environment variables into existing configuration.
+
+        Environment variables take precedence over saved configuration.
+
+        Args:
+            env_loader: Environment loader instance
+        """
+        # Override with environment values if present
+        if env_loader.get("PUID") is not None:
+            self.puid = env_loader.get("PUID")
+        if env_loader.get("PGID") is not None:
+            self.pgid = env_loader.get("PGID")
+        if env_loader.get("TZ") is not None:
+            self.timezone = env_loader.get("TZ")
+        if env_loader.get("BASE_PATH") is not None:
+            self.paths.base_path = env_loader.get("BASE_PATH")
+        if env_loader.get("CONFIG_PATH") is not None:
+            self.paths.config_path = env_loader.get("CONFIG_PATH")
+        if env_loader.get("DATA_PATH") is not None:
+            self.paths.data_path = env_loader.get("DATA_PATH")
+```
+
+#### Integration with Application Controller
+
+```python
+# controller.py (additions)
+
+from arr_stack_manager.utils.env_loader import EnvironmentLoader
+
+
+class AppController:
+    def __init__(self, config_dir: Path | None = None):
+        self.config_dir = config_dir or ConfigRepository.get_config_dir()
+        self.config_repo = ConfigRepository(self.config_dir)
+        self.env_loader = EnvironmentLoader()
+        self.configuration: Configuration | None = None
+
+    def load_configuration(self, stack_name: str | None = None) -> Configuration:
+        """Load configuration with environment variable support.
+
+        Args:
+            stack_name: Optional stack name to load
+
+        Returns:
+            Configuration with environment overrides applied
+        """
+        # Try to load saved configuration
+        if stack_name and self.config_repo.exists(stack_name):
+            stack_config = self.config_repo.load(stack_name)
+            config = stack_config.configuration
+            # Merge with environment variables (env takes precedence)
+            config.merge_with_env(self.env_loader)
+        elif self.env_loader.has_env_file():
+            # Create configuration from environment
+            config = Configuration.from_env(self.env_loader)
+        else:
+            # No saved config or env file, return None to trigger wizard
+            return None
+
+        self.configuration = config
+        return config
+
+    def get_env_defaults(self) -> dict[str, Any]:
+        """Get environment variable defaults for wizard.
+
+        Returns:
+            Dictionary of environment variable values
+        """
+        return self.env_loader.get_all()
+```
+
+### Configuration Wizard Integration
+
+The configuration wizard will use environment variables as default values:
+
+```python
+# screens/config_wizard.py (additions)
+
+class ConfigWizardScreen(Screen):
+    def on_mount(self) -> None:
+        """Initialize wizard with environment defaults."""
+        env_defaults = self.app.controller.get_env_defaults()
+
+        # Pre-fill form fields with environment values
+        self.query_one("#puid_input").value = str(env_defaults.get("PUID", ""))
+        self.query_one("#pgid_input").value = str(env_defaults.get("PGID", ""))
+        self.query_one("#timezone_input").value = env_defaults.get("TZ", "")
+        self.query_one("#base_path_input").value = env_defaults.get("BASE_PATH", "")
+```
+
+### .env.example Generation
+
+The application will generate a `.env.example` file on first run or via CLI command:
+
+```bash
+# Generate example environment file
+arr-stack-manager --generate-env-example
+
+# Output: .env.example created in current directory
+```
+
+### Validation
+
+All environment variable values will be validated using the existing ConfigurationValidator:
+
+```python
+# core/validator.py (additions)
+
+class ConfigurationValidator:
+    def validate_env_config(self, env_loader: EnvironmentLoader) -> ValidationResult:
+        """Validate environment variable configuration.
+
+        Args:
+            env_loader: Environment loader instance
+
+        Returns:
+            ValidationResult with any errors or warnings
+        """
+        errors = []
+        warnings = []
+
+        # Validate PUID/PGID
+        puid = env_loader.get("PUID")
+        pgid = env_loader.get("PGID")
+        if puid is not None:
+            result = self.validate_permissions(puid, pgid or 0)
+            errors.extend(result.errors)
+
+        # Validate paths
+        base_path = env_loader.get("BASE_PATH")
+        if base_path:
+            path_config = PathConfig(base_path=base_path)
+            result = self.validate_paths(path_config)
+            errors.extend(result.errors)
+
+        # Validate timezone
+        tz = env_loader.get("TZ")
+        if tz:
+            try:
+                import zoneinfo
+                zoneinfo.ZoneInfo(tz)
+            except Exception:
+                errors.append(f"Invalid timezone: {tz}")
+
+        return ValidationResult(
+            valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings,
+        )
+```
+
+### Benefits
+
+1. **Automation-Friendly**: Easy to configure via scripts or CI/CD
+2. **Consistency**: Same configuration across multiple deployments
+3. **Flexibility**: Override specific values without changing saved configs
+4. **Documentation**: .env.example serves as configuration reference
+5. **Security**: Sensitive values can be managed separately from code
+6. **Portability**: Easy to share configurations between team members
+
 ## Security Considerations
 
 ### Docker Socket Access
@@ -1458,12 +1870,21 @@ class PortValidationStrategy(ValidationStrategy):
 - Support environment variable overrides
 - Never log sensitive information
 
+### Environment File Security
+
+- Document that .env files should not be committed to version control
+- Add .env to .gitignore by default
+- Use appropriate file permissions (0600) for .env files
+- Warn users about sensitive data in environment files
+- Support encrypted environment variables for sensitive values
+
 ### Input Validation
 
 - Validate all user inputs
 - Sanitize template variables
 - Prevent path traversal attacks
 - Validate port ranges
+- Validate all environment variable values before use
 
 ## Future Enhancements
 

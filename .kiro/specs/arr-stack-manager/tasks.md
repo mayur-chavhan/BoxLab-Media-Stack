@@ -276,7 +276,7 @@ This plan breaks down the \*arr Stack Manager implementation into discrete, acti
   - Test keyboard navigation and shortcuts
   - _Requirements: 1.1, 2.1, 3.1, 5.1, 6.1_
 
-- [ ] 27. Add comprehensive error handling
+- [x] 27. Add comprehensive error handling
 
   - Implement error boundaries for all screens
   - Add user-friendly error displays with remediation steps
@@ -306,6 +306,7 @@ This plan breaks down the \*arr Stack Manager implementation into discrete, acti
   - _Requirements: All_
 
 - [ ] 30. Set up packaging and distribution
+
   - Configure PyInstaller for standalone binary builds
   - Create build scripts for multiple platforms
   - Set up GitHub Actions for CI/CD
@@ -313,6 +314,71 @@ This plan breaks down the \*arr Stack Manager implementation into discrete, acti
   - Create release workflow
   - Test installation methods on clean systems
   - _Requirements: 8.1, 8.2, 8.3_
+
+- [x] 31. Implement environment file configuration support
+
+  - Create utils/env_loader.py with EnvironmentLoader class
+  - Define supported environment variables (PUID, PGID, TZ, BASE_PATH, etc.)
+  - Implement .env file search in multiple locations (cwd, project root, user config)
+  - Add type conversion for environment variables (int, bool, str)
+  - Implement get() method with default value support
+  - Implement get_all() method to retrieve all environment variables
+  - Add python-dotenv dependency to pyproject.toml
+  - _Requirements: 11.1, 11.2, 11.5_
+
+- [x] 32. Add environment variable integration to configuration models
+
+  - Extend Configuration model with from_env() class method
+  - Implement merge_with_env() method to override saved config with env values
+  - Add environment variable defaults for PUID/PGID (fallback to current user)
+  - Add environment variable support for timezone and paths
+  - Ensure environment variables take precedence over saved configuration
+  - _Requirements: 11.2, 11.3, 11.4_
+
+- [x] 33. Integrate environment loader with application controller
+
+  - Initialize EnvironmentLoader in AppController.**init**()
+  - Update load_configuration() to merge environment variables
+  - Implement get_env_defaults() method for wizard integration
+  - Add logic to create config from env when no saved config exists
+  - Handle cases where neither saved config nor env file exists
+  - _Requirements: 11.3, 11.4_
+
+- [x] 34. Update configuration wizard to use environment defaults
+
+  - Pre-fill wizard form fields with environment variable values
+  - Show indicator when values come from environment
+  - Allow users to override environment defaults in wizard
+  - Update wizard validation to work with environment values
+  - _Requirements: 11.3_
+
+- [x] 35. Implement .env.example generation
+
+  - Add generate_example_file() method to EnvironmentLoader
+  - Include all supported variables with descriptions
+  - Add default values as comments
+  - Create CLI command --generate-env-example
+  - Generate .env.example on first run if it doesn't exist
+  - Add .env to .gitignore template
+  - _Requirements: 11.6, 11.7_
+
+- [x] 36. Add environment variable validation
+
+  - Extend ConfigurationValidator with validate_env_config() method
+  - Validate PUID/PGID values from environment
+  - Validate timezone format
+  - Validate path existence and permissions
+  - Validate port ranges if specified in environment
+  - Return detailed validation errors with remediation steps
+  - _Requirements: 11.5_
+
+- [x] 37. Update documentation for environment configuration
+  - Document all supported environment variables
+  - Add examples of .env file usage
+  - Document environment variable priority order
+  - Add security notes about .env files
+  - Include troubleshooting guide for environment issues
+  - _Requirements: 11.6, 11.7_
 
 ## Notes
 

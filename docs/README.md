@@ -6,10 +6,13 @@ This directory contains all documentation for the arr Stack Manager project.
 
 ### User Guides & Fixes
 
+- **[Environment Configuration Guide](ENVIRONMENT_CONFIGURATION.md)** - Complete guide to using environment variables and .env files
+- **[Environment Variables Quick Reference](ENV_QUICK_REFERENCE.md)** - Quick reference card for environment variables
 - **[Workflow Fix Summary](WORKFLOW_FIX_SUMMARY.md)** - Fixes for navigation workflow issues
 - **[Config Wizard Fixes](CONFIG_WIZARD_FIXES.md)** - Step counter, path validation, and browse button fixes
 - **[Stack Manager Crash Fix](STACK_MANAGER_CRASH_FIX.md)** - Fixes for crashes when navigating to Stack Manager
 - **[Docker Permission Fix](DOCKER_PERMISSION_FIX.md)** - How to handle Docker permission issues for sudo/root/regular users
+- **[Sudo Support](SUDO_SUPPORT.md)** - Documentation for sudo/root user support
 
 ### Implementation Tasks
 
@@ -26,6 +29,8 @@ Implementation documentation for completed tasks:
 - [Task 21 Implementation](TASK_21_IMPLEMENTATION.md)
 - [Task 22 Implementation](TASK_22_IMPLEMENTATION.md)
 - [Task 23 Implementation](TASK_23_IMPLEMENTATION.md)
+- [Task 34 Implementation](TASK_34_IMPLEMENTATION.md) - Environment configuration integration
+- [Task 37 Implementation](TASK_37_IMPLEMENTATION.md) - Environment configuration documentation
 
 ## 📁 Project Structure
 

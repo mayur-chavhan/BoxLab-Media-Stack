@@ -147,3 +147,17 @@ The *arr Stack Manager is a Textual-based Terminal User Interface (TUI) applicat
 4. THE Stack Manager SHALL provide default values for all service-specific settings
 5. THE Stack Manager SHALL validate service-specific settings against known constraints
 6. THE Stack Manager SHALL persist service-specific configurations in the generated Docker Compose file
+
+### Requirement 11
+
+**User Story:** As a user, I want to provide configuration values through an environment file, so that I can easily customize settings without going through the wizard each time
+
+#### Acceptance Criteria
+
+1. THE Stack Manager SHALL support loading configuration from a .env.example file in the project root
+2. THE Stack Manager SHALL read environment variables for PUID, PGID, timezone, base path, and compose file path
+3. WHEN an environment variable is set, THE Stack Manager SHALL use the environment value as the default in the configuration wizard
+4. WHEN an environment variable is set, THE Stack Manager SHALL override saved configuration values with environment values
+5. THE Stack Manager SHALL validate all environment variable values before using them
+6. THE Stack Manager SHALL generate a .env.example file with all supported configuration variables and descriptions
+7. THE Stack Manager SHALL document each environment variable with inline comments in the .env.example file
