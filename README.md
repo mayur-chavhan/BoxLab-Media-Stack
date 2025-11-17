@@ -114,6 +114,7 @@ Options:
   --verbose, -v            Enable verbose (DEBUG) logging
   --log-file PATH          Write logs to specified file
   --no-docker-check        Skip Docker availability check on startup (for testing)
+  --generate-env-example   Generate .env.example file and exit
   -h, --help               Show help message and exit
 ```
 
@@ -137,6 +138,9 @@ arr-stack-manager --verbose
 
 # Save logs to a file
 arr-stack-manager --log-file /var/log/arr-stack-manager.log
+
+# Generate .env.example file for environment configuration
+arr-stack-manager --generate-env-example
 ```
 
 ## Keyboard Shortcuts
@@ -157,10 +161,64 @@ See the help screen (`h` or `?`) for detailed information about keyboard shortcu
 
 ## Configuration
 
+### Configuration Storage
+
 The application stores configuration in `~/.config/arr-stack-manager/`:
 
 - `config.json`: User preferences and stack configurations
 - `stacks/`: Generated Docker Compose files for each stack
+
+### Environment Variables
+
+You can configure the application using environment variables and `.env` files. This is useful for:
+
+- Setting default values for the configuration wizard
+- Automating deployments with predefined settings
+- Managing multiple environments
+
+#### Supported Environment Variables
+
+- `PUID` - User ID for container processes (default: current user)
+- `PGID` - Group ID for container processes (default: current group)
+- `TZ` / `TIMEZONE` - Timezone for services (default: UTC)
+- `BASE_PATH` - Root directory for all stack data
+- `CONFIG_PATH` - Directory for service configurations
+- `DATA_PATH` - Directory for media and downloads
+- `COMPOSE_FILE_PATH` - Location for generated docker-compose.yml
+- `STACK_NAME` - Name for the stack configuration
+
+#### Using .env Files
+
+Create a `.env` file in your working directory:
+
+```bash
+# Generate example file
+arr-stack-manager --generate-env-example
+
+# Copy and edit
+cp .env.example .env
+nano .env
+```
+
+Example `.env` file:
+
+```bash
+PUID=1000
+PGID=1000
+TZ=America/New_York
+BASE_PATH=/mnt/storage
+STACK_NAME=media-automation
+```
+
+The application searches for `.env` files in:
+
+1. Current working directory (highest priority)
+2. Project root directory
+3. User config directory (`~/.config/arr-stack-manager/`)
+
+**Priority order:** System environment > Current dir .env > Project .env > User config .env > Saved configuration
+
+For detailed information, see the [Environment Configuration Guide](docs/ENVIRONMENT_CONFIGURATION.md).
 
 ## Development
 
