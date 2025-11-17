@@ -7,6 +7,7 @@ from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Label, Static
 
@@ -432,14 +433,26 @@ class StackManagerApp(App):
             )
 
             # Create crash report
-            context = {
-                "screen": self.screen.__class__.__name__ if self.screen else "Unknown",
-                "stack_name": self.stack_name,
-            }
-            crash_file = self.state_manager.create_crash_report(
-                exc_value,
-                context
-            )
+            try:
+                # Safely get screen name
+                screen_name = "Unknown"
+                try:
+                    if self.screen:
+                        screen_name = self.screen.__class__.__name__
+                except Exception:
+                    pass
+                
+                context = {
+                    "screen": screen_name,
+                    "stack_name": self.stack_name,
+                }
+                crash_file = self.state_manager.create_crash_report(
+                    exc_value,
+                    context
+                )
+            except Exception as e:
+                logger.error(f"Failed to create crash report: {e}")
+                crash_file = None
 
             # Try to save current state
             try:
@@ -450,12 +463,20 @@ class StackManagerApp(App):
             # Show error to user if possible
             try:
                 error_display = handle_exception(exc_value, "Application")
-                self.notify(
-                    f"{error_display.message}\n\nCrash report saved to: {crash_file}",
-                    title="Critical Error",
-                    severity="error",
-                    timeout=30,
-                )
+                if crash_file:
+                    self.notify(
+                        f"{error_display.message}\n\nCrash report saved to: {crash_file}",
+                        title="Critical Error",
+                        severity="error",
+                        timeout=30,
+                    )
+                else:
+                    self.notify(
+                        error_display.message,
+                        title="Critical Error",
+                        severity="error",
+                        timeout=30,
+                    )
             except Exception:
                 pass
 
@@ -728,3 +749,24 @@ class StackManagerApp(App):
 
         except Exception as e:
             logger.error(f"Error during unmount: {e}")
+
+    def compose(self) -> ComposeResult:
+        """Compose the application layout."""
+        # Use Header and Footer widgets
+        yield Header(show_clock=False)
+        yield Footer()
+
+    def _handle_exception(self, error: Exception) -> None:
+        """Handle exceptions from Textual framework.
+        
+        Args:
+            error: The exception that occurred
+        """
+        # Suppress NoMatches errors from Header during unmount
+        # This is a known Textual issue where Header tries to update during teardown
+        if isinstance(error, NoMatches) and "HeaderTitle" in str(error):
+            logger.debug("Suppressed Header NoMatches error during unmount")
+            return
+        
+        # For other exceptions, use the default handler
+        super()._handle_exception(error)
