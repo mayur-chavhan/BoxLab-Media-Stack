@@ -1,6 +1,7 @@
 """Main Textual application for arr Stack Manager."""
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,8 @@ from arr_stack_manager.screens import (
     SetupWizardScreen,
     StackManagerScreen,
 )
+from arr_stack_manager.utils.errors import handle_exception
+from arr_stack_manager.utils.state_manager import get_state_manager
 
 logger = logging.getLogger(__name__)
 
@@ -381,8 +384,14 @@ class StackManagerApp(App):
         self.stack_name = stack_name
         self.show_welcome = show_welcome
 
+        # Initialize state manager for crash recovery
+        self.state_manager = get_state_manager()
+
         # Register navigation callbacks
         self._register_navigation_callbacks()
+
+        # Set up global exception handler
+        self._setup_exception_handler()
 
         logger.info("StackManagerApp initialized")
 
@@ -407,33 +416,106 @@ class StackManagerApp(App):
             ScreenType.SETUP_WIZARD, self._navigate_to_setup_wizard
         )
 
+    def _setup_exception_handler(self) -> None:
+        """Set up global exception handler for crash recovery."""
+        def exception_handler(exc_type, exc_value, exc_traceback):
+            """Handle uncaught exceptions."""
+            # Don't catch KeyboardInterrupt
+            if issubclass(exc_type, KeyboardInterrupt):
+                sys.__excepthook__(exc_type, exc_value, exc_traceback)
+                return
+
+            # Log the exception
+            logger.critical(
+                "Uncaught exception",
+                exc_info=(exc_type, exc_value, exc_traceback)
+            )
+
+            # Create crash report
+            context = {
+                "screen": self.screen.__class__.__name__ if self.screen else "Unknown",
+                "stack_name": self.stack_name,
+            }
+            crash_file = self.state_manager.create_crash_report(
+                exc_value,
+                context
+            )
+
+            # Try to save current state
+            try:
+                self._save_app_state()
+            except Exception as e:
+                logger.error(f"Failed to save state during crash: {e}")
+
+            # Show error to user if possible
+            try:
+                error_display = handle_exception(exc_value, "Application")
+                self.notify(
+                    f"{error_display.message}\n\nCrash report saved to: {crash_file}",
+                    title="Critical Error",
+                    severity="error",
+                    timeout=30,
+                )
+            except Exception:
+                pass
+
+            # Call original exception handler
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+        # Install exception handler
+        sys.excepthook = exception_handler
+
     def on_mount(self) -> None:
         """Handle application mount event."""
         logger.info("Application mounted")
 
-        # Initialize controller
-        self.controller.initialize()
+        try:
+            # Initialize controller
+            self.controller.initialize()
 
-        # Check if this is first run
-        is_first_run = self.controller.is_first_run()
+            # Check for crash recovery
+            if self._check_crash_recovery():
+                return  # Crash recovery screen will be shown
 
-        # Show welcome screen if requested or if first run
-        if self.show_welcome or is_first_run:
-            if is_first_run:
-                logger.info("First run detected, showing setup wizard")
-                self.push_screen(SetupWizardScreen(self.controller))
+            # Check if this is first run
+            is_first_run = self.controller.is_first_run()
+
+            # Show welcome screen if requested or if first run
+            if self.show_welcome or is_first_run:
+                if is_first_run:
+                    logger.info("First run detected, showing setup wizard")
+                    self.push_screen(SetupWizardScreen(self.controller))
+                else:
+                    self.push_screen(WelcomeScreen())
             else:
-                self.push_screen(WelcomeScreen())
-        else:
-            # Load stack if specified
-            if self.stack_name:
-                try:
-                    self.controller.load_configuration(self.stack_name)
-                    logger.info(f"Loaded stack: {self.stack_name}")
-                except Exception as e:
-                    logger.error(f"Failed to load stack {self.stack_name}: {e}")
+                # Load stack if specified
+                if self.stack_name:
+                    try:
+                        self.controller.load_configuration(self.stack_name)
+                        logger.info(f"Loaded stack: {self.stack_name}")
+                    except Exception as e:
+                        logger.error(f"Failed to load stack {self.stack_name}: {e}")
+                        error_display = handle_exception(e, "Loading configuration")
+                        self.notify(
+                            error_display.message,
+                            title=error_display.title,
+                            severity="error",
+                            timeout=10,
+                        )
 
-            # Navigate to dashboard
+                # Navigate to dashboard
+                self.push_screen(DashboardScreen(self.controller, self.stack_name))
+
+        except Exception as e:
+            logger.critical(f"Failed to mount application: {e}", exc_info=True)
+            error_display = handle_exception(e, "Application startup")
+            self.notify(
+                error_display.message,
+                title="Startup Error",
+                severity="error",
+                timeout=15,
+            )
+            # Try to show dashboard anyway
             self.push_screen(DashboardScreen(self.controller, self.stack_name))
 
     def _navigate_to_dashboard(self, **kwargs: Any) -> None:
@@ -542,3 +624,107 @@ class StackManagerApp(App):
         # This is a placeholder for screens that support refresh
         if hasattr(self.screen, "action_refresh"):
             self.screen.action_refresh()
+
+    def _check_crash_recovery(self) -> bool:
+        """
+        Check if there's a saved state from a previous crash.
+
+        Returns:
+            True if crash recovery screen was shown, False otherwise
+        """
+        try:
+            if not self.state_manager.has_saved_state():
+                return False
+
+            # Check state age
+            state_age = self.state_manager.get_state_age()
+            if state_age is None or state_age > 3600:  # More than 1 hour old
+                logger.info("Saved state is too old, ignoring")
+                self.state_manager.clear_state()
+                return False
+
+            # Load saved state
+            saved_state = self.state_manager.load_state()
+            if not saved_state:
+                return False
+
+            logger.info("Found saved state from previous session")
+
+            # Show recovery notification
+            self.notify(
+                "Recovered from previous session",
+                title="Crash Recovery",
+                severity="information",
+                timeout=5,
+            )
+
+            # Restore state
+            self._restore_app_state(saved_state)
+
+            # Clear the saved state
+            self.state_manager.clear_state()
+
+            return False  # Continue normal startup with restored state
+
+        except Exception as e:
+            logger.error(f"Failed to check crash recovery: {e}")
+            return False
+
+    def _save_app_state(self) -> None:
+        """Save current application state for crash recovery."""
+        try:
+            state = {
+                "stack_name": self.stack_name,
+                "current_screen": self.screen.__class__.__name__ if self.screen else None,
+                "controller_state": {
+                    "current_stack": self.controller.current_stack.name if self.controller.current_stack else None,
+                },
+            }
+
+            self.state_manager.save_state(state)
+            logger.debug("Application state saved")
+
+        except Exception as e:
+            logger.warning(f"Failed to save application state: {e}")
+
+    def _restore_app_state(self, state: dict[str, Any]) -> None:
+        """
+        Restore application state from saved data.
+
+        Args:
+            state: Saved application state
+        """
+        try:
+            # Restore stack name
+            if "stack_name" in state:
+                self.stack_name = state["stack_name"]
+                logger.debug(f"Restored stack_name: {self.stack_name}")
+
+            # Restore controller state
+            if "controller_state" in state:
+                controller_state = state["controller_state"]
+                if controller_state.get("current_stack"):
+                    try:
+                        self.controller.load_configuration(controller_state["current_stack"])
+                        logger.debug(f"Restored current stack: {controller_state['current_stack']}")
+                    except Exception as e:
+                        logger.warning(f"Failed to restore current stack: {e}")
+
+            logger.info("Application state restored successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to restore application state: {e}")
+
+    def on_unmount(self) -> None:
+        """Handle application unmount event."""
+        try:
+            # Clean up old crash reports
+            self.state_manager.cleanup_old_crashes()
+
+            # Clear state on clean exit
+            self.state_manager.clear_state()
+
+            logger.info("Application unmounted cleanly")
+
+        except Exception as e:
+            logger.error(f"Error during unmount: {e}")

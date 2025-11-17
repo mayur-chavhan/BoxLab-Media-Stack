@@ -291,6 +291,11 @@ class BaseConfigurationStep(Static):
         text-style: italic;
         margin-top: 0;
     }
+
+    BaseConfigurationStep .env-indicator {
+        color: $success;
+        text-style: bold;
+    }
     """
 
     def __init__(
@@ -298,6 +303,7 @@ class BaseConfigurationStep(Static):
         puid: int = 1000,
         pgid: int = 1000,
         timezone: str = "UTC",
+        from_env: dict[str, bool] | None = None,
         *,
         name: str | None = None,
         id: str | None = None,
@@ -309,6 +315,7 @@ class BaseConfigurationStep(Static):
             puid: Initial PUID value
             pgid: Initial PGID value
             timezone: Initial timezone value
+            from_env: Dictionary indicating which values come from environment
             name: Widget name
             id: Widget ID
             classes: CSS classes
@@ -317,6 +324,7 @@ class BaseConfigurationStep(Static):
         self.puid = puid
         self.pgid = pgid
         self.timezone = timezone
+        self.from_env = from_env or {}
 
     def compose(self) -> ComposeResult:
         """Compose the base configuration step layout."""
@@ -326,7 +334,10 @@ class BaseConfigurationStep(Static):
             
             # PUID input
             with Horizontal(classes="form-row"):
-                yield Label("PUID (User ID):", classes="form-label")
+                puid_label = "PUID (User ID):"
+                if self.from_env.get("puid"):
+                    puid_label += " 🌍"  # Environment indicator
+                yield Label(puid_label, classes="form-label")
                 yield Input(
                     value=str(self.puid),
                     placeholder="1000",
@@ -337,7 +348,10 @@ class BaseConfigurationStep(Static):
             
             # PGID input
             with Horizontal(classes="form-row"):
-                yield Label("PGID (Group ID):", classes="form-label")
+                pgid_label = "PGID (Group ID):"
+                if self.from_env.get("pgid"):
+                    pgid_label += " 🌍"  # Environment indicator
+                yield Label(pgid_label, classes="form-label")
                 yield Input(
                     value=str(self.pgid),
                     placeholder="1000",
@@ -346,10 +360,13 @@ class BaseConfigurationStep(Static):
                     id="pgid-input",
                 )
             
-            # Info text showing detected user
+            # Info text showing detected user and environment status
             detected_user = self._detect_current_user()
+            info_parts = [f"ℹ Current user: {detected_user}"]
+            if self.from_env.get("puid") or self.from_env.get("pgid"):
+                info_parts.append("🌍 Values from environment file")
             yield Label(
-                f"ℹ Current user: {detected_user}",
+                " | ".join(info_parts),
                 classes="info-text",
                 id="user-info",
             )
@@ -359,7 +376,10 @@ class BaseConfigurationStep(Static):
             yield Label("Timezone", classes="section-title")
             
             with Horizontal(classes="form-row"):
-                yield Label("Timezone:", classes="form-label")
+                tz_label = "Timezone:"
+                if self.from_env.get("timezone"):
+                    tz_label += " 🌍"  # Environment indicator
+                yield Label(tz_label, classes="form-label")
                 yield Input(
                     value=self.timezone,
                     placeholder="America/New_York",
@@ -369,10 +389,13 @@ class BaseConfigurationStep(Static):
                 )
                 yield Button("Detect", id="detect-timezone", variant="primary", classes="detect-button")
             
-            # Info text showing detected timezone
+            # Info text showing detected timezone and environment status
             detected_tz = self._detect_timezone()
+            info_parts = [f"ℹ Detected: {detected_tz}"]
+            if self.from_env.get("timezone"):
+                info_parts.append("🌍 Value from environment file")
             yield Label(
-                f"ℹ Detected: {detected_tz}",
+                " | ".join(info_parts),
                 classes="info-text",
                 id="timezone-info",
             )
@@ -557,6 +580,7 @@ class PathConfigurationStep(Static):
     def __init__(
         self,
         base_path: str = "",
+        from_env: bool = False,
         *,
         name: str | None = None,
         id: str | None = None,
@@ -566,12 +590,14 @@ class PathConfigurationStep(Static):
 
         Args:
             base_path: Initial base path value
+            from_env: Whether the base path comes from environment
             name: Widget name
             id: Widget ID
             classes: CSS classes
         """
         super().__init__(name=name, id=id, classes=classes)
         self.base_path = base_path or self._detect_default_path()
+        self.from_env = from_env
         self._validation_result: ValidationResult | None = None
 
     def compose(self) -> ComposeResult:
@@ -582,7 +608,10 @@ class PathConfigurationStep(Static):
             
             # Base path input
             with Horizontal(classes="form-row"):
-                yield Label("Base Path:", classes="form-label")
+                base_path_label = "Base Path:"
+                if self.from_env:
+                    base_path_label += " 🌍"  # Environment indicator
+                yield Label(base_path_label, classes="form-label")
                 yield Input(
                     value=self.base_path,
                     placeholder="/mnt/storage",
@@ -591,8 +620,11 @@ class PathConfigurationStep(Static):
                 )
                 yield Button("Browse", id="browse-button", variant="default", classes="browse-button")
             
+            info_parts = ["All configuration and data will be stored under this directory."]
+            if self.from_env:
+                info_parts.append("🌍 Value from environment file")
             yield Label(
-                "All configuration and data will be stored under this directory.",
+                " ".join(info_parts),
                 classes="info-text",
             )
 
@@ -1184,6 +1216,16 @@ class ConfigWizardScreen(Screen):
         text-align: center;
         margin-bottom: 1;
     }
+
+    ConfigWizardScreen #env-info {
+        color: $success;
+        text-style: italic;
+        text-align: center;
+        padding: 1;
+        background: $surface;
+        border: solid $success;
+        margin-bottom: 1;
+    }
     """
 
     def __init__(
@@ -1211,14 +1253,20 @@ class ConfigWizardScreen(Screen):
         self._total_steps = 4
         self._validation_error: str | None = None
 
-        # Auto-detect PUID/PGID and timezone
-        self._detected_puid = self._detect_puid()
-        self._detected_pgid = self._detect_pgid()
-        self._detected_timezone = self._detect_timezone()
+        # Get environment defaults from controller
+        self._env_defaults = self.controller.get_env_defaults()
+        
+        # Auto-detect PUID/PGID and timezone, preferring environment values
+        self._detected_puid = self._env_defaults.get("puid", self._detect_puid())
+        self._detected_pgid = self._env_defaults.get("pgid", self._detect_pgid())
+        self._detected_timezone = self._env_defaults.get("timezone", self._detect_timezone())
+        self._detected_base_path = self._env_defaults.get("base_path", "")
 
         logger.info(
             f"Wizard initialized with {len(configuration.get_selected_services())} services, "
-            f"detected PUID={self._detected_puid}, PGID={self._detected_pgid}, TZ={self._detected_timezone}"
+            f"PUID={self._detected_puid} (from_env={('puid' in self._env_defaults)}), "
+            f"PGID={self._detected_pgid} (from_env={('pgid' in self._env_defaults)}), "
+            f"TZ={self._detected_timezone} (from_env={('timezone' in self._env_defaults)})"
         )
 
     def compose(self) -> ComposeResult:
@@ -1226,6 +1274,14 @@ class ConfigWizardScreen(Screen):
         yield Header()
 
         with ScrollableContainer(classes="wizard-container"):
+            # Show environment info if any defaults are loaded
+            if self._env_defaults:
+                yield Label(
+                    "🌍 Some values are pre-filled from your .env file. You can override them below.",
+                    classes="info-text",
+                    id="env-info",
+                )
+            
             # Step indicator
             yield StepIndicator(
                 current_step=self._current_step,
@@ -1282,20 +1338,29 @@ class ConfigWizardScreen(Screen):
                 id="service-confirmation-step",
             )
         elif self._current_step == WizardStep.BASE_CONFIGURATION:
+            # Determine which values come from environment
+            from_env = {
+                "puid": "puid" in self._env_defaults,
+                "pgid": "pgid" in self._env_defaults,
+                "timezone": "timezone" in self._env_defaults,
+            }
+            
             yield BaseConfigurationStep(
                 puid=self._detected_puid,
                 pgid=self._detected_pgid,
                 timezone=self._detected_timezone,
+                from_env=from_env,
                 id="base-config-step",
             )
         elif self._current_step == WizardStep.PATH_CONFIGURATION:
-            # Get base path from configuration if available
-            base_path = ""
+            # Get base path from configuration if available, otherwise use detected
+            base_path = self._detected_base_path
             if hasattr(self.configuration, 'paths') and self.configuration.paths:
                 base_path = self.configuration.paths.base_path
             
             yield PathConfigurationStep(
                 base_path=base_path,
+                from_env="base_path" in self._env_defaults,
                 id="path-config-step",
             )
         elif self._current_step == WizardStep.SERVICE_SPECIFIC_CONFIGURATION:

@@ -313,16 +313,22 @@ class DashboardScreen(Screen):
         width: 100%;
     }
 
+    DashboardScreen .no-stack-container {
+        height: 100%;
+        width: 100%;
+        align: center middle;
+    }
+
     DashboardScreen .no-services {
         color: $text-muted;
         text-style: italic;
-        content-align: center middle;
+        text-align: center;
         height: auto;
         margin: 1;
     }
 
     DashboardScreen #create-stack-button {
-        margin: 2 auto;
+        margin-top: 2;
         width: 30;
     }
 
@@ -453,27 +459,34 @@ class DashboardScreen(Screen):
         services_list = self.query_one("#services-list", ScrollableContainer)
         services_list.remove_children()
         
-        # Create a container with message and button
-        services_list.mount(
+        # Create a centered container with message and button
+        from textual.containers import Center
+        
+        container = Vertical(classes="no-stack-container")
+        container.mount(
             Label(
                 "No stack configured yet.",
                 classes="no-services",
                 id="no-stack-message",
             )
         )
-        services_list.mount(
+        container.mount(
             Label(
                 "Get started by creating your first stack:",
                 classes="no-services",
             )
         )
-        services_list.mount(
-            Button(
-                "Create New Stack",
-                id="create-stack-button",
-                variant="primary",
+        container.mount(
+            Center(
+                Button(
+                    "Create New Stack",
+                    id="create-stack-button",
+                    variant="primary",
+                )
             )
         )
+        
+        services_list.mount(container)
 
     def _show_error_message(self, error: str) -> None:
         """Show error message.
