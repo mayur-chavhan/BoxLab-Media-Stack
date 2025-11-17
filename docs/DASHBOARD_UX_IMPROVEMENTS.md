@@ -32,11 +32,31 @@ def _show_no_stack_message(self) -> None:
     )
 ```
 
-The button is styled to be centered and prominent:
+The button is wrapped in a centered container and styled to be prominent:
+
+```python
+# Wrapped in a Center container for proper alignment
+container = Vertical(classes="no-stack-container")
+container.mount(Label("No stack configured yet.", classes="no-services"))
+container.mount(Label("Get started by creating your first stack:", classes="no-services"))
+container.mount(
+    Center(
+        Button("Create New Stack", id="create-stack-button", variant="primary")
+    )
+)
+```
+
+CSS styling:
 
 ```css
+DashboardScreen .no-stack-container {
+  height: 100%;
+  width: 100%;
+  align: center middle;
+}
+
 DashboardScreen #create-stack-button {
-  margin: 2 auto;
+  margin-top: 2;
   width: 30;
 }
 ```
