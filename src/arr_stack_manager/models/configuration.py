@@ -1,7 +1,12 @@
 """Configuration data models."""
 
+import os
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, field_validator
+
+if TYPE_CHECKING:
+    from arr_stack_manager.utils.env_loader import EnvironmentLoader
 
 
 class PathConfig(BaseModel):
@@ -87,3 +92,113 @@ class Configuration(BaseModel):
     def get_service(self, service_name: str) -> ServiceConfig | None:
         """Get a service configuration by name."""
         return self.services.get(service_name)
+
+    @classmethod
+    def from_env(cls, env_loader: "EnvironmentLoader") -> "Configuration":
+        """Create a Configuration from environment variables.
+
+        Args:
+            env_loader: EnvironmentLoader instance to read environment variables
+
+        Returns:
+            Configuration instance with values from environment variables
+
+        Raises:
+            ValueError: If required environment variables are missing
+        """
+        # Get PUID/PGID with fallback to current user
+        puid = env_loader.get("PUID")
+        if puid is None:
+            puid = os.getuid()
+
+        pgid = env_loader.get("PGID")
+        if pgid is None:
+            pgid = os.getgid()
+
+        # Get timezone (support both TZ and TIMEZONE)
+        timezone = env_loader.get("TZ") or env_loader.get("TIMEZONE") or "UTC"
+
+        # Get base path (required)
+        base_path = env_loader.get("BASE_PATH")
+        if not base_path:
+            raise ValueError("BASE_PATH environment variable is required")
+
+        # Get optional path overrides
+        config_path = env_loader.get("CONFIG_PATH")
+        data_path = env_loader.get("DATA_PATH")
+
+        # Create PathConfig
+        paths = PathConfig(
+            base_path=base_path,
+            config_path=config_path,
+            data_path=data_path,
+        )
+
+        # Create Configuration
+        return cls(
+            puid=puid,
+            pgid=pgid,
+            timezone=timezone,
+            paths=paths,
+        )
+
+    def merge_with_env(self, env_loader: "EnvironmentLoader") -> "Configuration":
+        """Merge configuration with environment variables.
+
+        Environment variables take precedence over saved configuration values.
+
+        Args:
+            env_loader: EnvironmentLoader instance to read environment variables
+
+        Returns:
+            New Configuration instance with environment values merged
+        """
+        # Start with current values
+        puid = self.puid
+        pgid = self.pgid
+        timezone = self.timezone
+        base_path = self.paths.base_path
+        config_path = self.paths.config_path
+        data_path = self.paths.data_path
+
+        # Override with environment variables if present
+        env_puid = env_loader.get("PUID")
+        if env_puid is not None:
+            puid = env_puid
+
+        env_pgid = env_loader.get("PGID")
+        if env_pgid is not None:
+            pgid = env_pgid
+
+        # Check both TZ and TIMEZONE
+        env_timezone = env_loader.get("TZ") or env_loader.get("TIMEZONE")
+        if env_timezone is not None:
+            timezone = env_timezone
+
+        env_base_path = env_loader.get("BASE_PATH")
+        if env_base_path is not None:
+            base_path = env_base_path
+
+        env_config_path = env_loader.get("CONFIG_PATH")
+        if env_config_path is not None:
+            config_path = env_config_path
+
+        env_data_path = env_loader.get("DATA_PATH")
+        if env_data_path is not None:
+            data_path = env_data_path
+
+        # Create new PathConfig
+        paths = PathConfig(
+            base_path=base_path,
+            config_path=config_path,
+            data_path=data_path,
+        )
+
+        # Create new Configuration with merged values
+        return Configuration(
+            puid=puid,
+            pgid=pgid,
+            timezone=timezone,
+            paths=paths,
+            services=self.services.copy(),  # Preserve existing services
+        )
