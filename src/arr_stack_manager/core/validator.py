@@ -4,6 +4,7 @@ import os
 import pwd
 import socket
 from pathlib import Path
+from typing import Any
 
 from arr_stack_manager.models.configuration import Configuration, PathConfig
 from arr_stack_manager.models.stack import StackConfig
@@ -326,6 +327,248 @@ class ConfigurationValidator:
                 )
 
         return result
+
+    def validate_env_config(self, env_vars: dict[str, Any]) -> ValidationResult:
+        """
+        Validate environment variable configuration.
+
+        Args:
+            env_vars: Dictionary of environment variables to validate
+
+        Returns:
+            ValidationResult with any errors or warnings
+        """
+        result = ValidationResult(valid=True)
+
+        # Validate PUID if present
+        if "PUID" in env_vars:
+            puid = env_vars["PUID"]
+            if not isinstance(puid, int):
+                result.add_error(
+                    f"Invalid PUID type in environment: {type(puid).__name__}\n"
+                    "Remediation: PUID must be an integer (e.g., PUID=1000)"
+                )
+            elif puid < 0:
+                result.add_error(
+                    f"Invalid PUID value in environment: {puid}\n"
+                    "Remediation: PUID must be a non-negative integer"
+                )
+            else:
+                # Check if PUID exists in the system
+                try:
+                    user_info = pwd.getpwuid(puid)
+                    result.add_warning(
+                        f"Environment PUID {puid} corresponds to user: {user_info.pw_name}"
+                    )
+                except KeyError:
+                    result.add_warning(
+                        f"Environment PUID {puid} does not exist in the system\n"
+                        "This may cause permission issues with mounted volumes"
+                    )
+
+        # Validate PGID if present
+        if "PGID" in env_vars:
+            pgid = env_vars["PGID"]
+            if not isinstance(pgid, int):
+                result.add_error(
+                    f"Invalid PGID type in environment: {type(pgid).__name__}\n"
+                    "Remediation: PGID must be an integer (e.g., PGID=1000)"
+                )
+            elif pgid < 0:
+                result.add_error(
+                    f"Invalid PGID value in environment: {pgid}\n"
+                    "Remediation: PGID must be a non-negative integer"
+                )
+            else:
+                # Check if PGID exists in the system
+                try:
+                    import grp
+
+                    group_info = grp.getgrgid(pgid)
+                    result.add_warning(
+                        f"Environment PGID {pgid} corresponds to group: {group_info.gr_name}"
+                    )
+                except KeyError:
+                    result.add_warning(
+                        f"Environment PGID {pgid} does not exist in the system\n"
+                        "This may cause permission issues with mounted volumes"
+                    )
+
+        # Validate timezone if present
+        if "TZ" in env_vars or "TIMEZONE" in env_vars:
+            tz = env_vars.get("TZ")
+            if tz is None:
+                tz = env_vars.get("TIMEZONE")
+            
+            if tz is None or not isinstance(tz, str):
+                result.add_error(
+                    f"Invalid timezone type in environment: {type(tz).__name__}\n"
+                    "Remediation: Timezone must be a string (e.g., TZ=America/New_York)"
+                )
+            elif not tz:
+                result.add_error(
+                    "Empty timezone value in environment\n"
+                    "Remediation: Provide a valid timezone (e.g., TZ=America/New_York)"
+                )
+            else:
+                # Validate timezone format
+                if not self._is_valid_timezone(tz):
+                    result.add_error(
+                        f"Invalid timezone format in environment: {tz}\n"
+                        "Remediation: Use TZ database format (e.g., America/New_York, Europe/London, UTC)\n"
+                        "See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
+                    )
+                else:
+                    result.add_warning(f"Using timezone from environment: {tz}")
+
+        # Validate BASE_PATH if present
+        if "BASE_PATH" in env_vars:
+            base_path = env_vars["BASE_PATH"]
+            if not isinstance(base_path, str):
+                result.add_error(
+                    f"Invalid BASE_PATH type in environment: {type(base_path).__name__}\n"
+                    "Remediation: BASE_PATH must be a string path (e.g., BASE_PATH=/mnt/storage)"
+                )
+            elif not base_path:
+                result.add_error(
+                    "Empty BASE_PATH value in environment\n"
+                    "Remediation: Provide a valid directory path (e.g., BASE_PATH=/mnt/storage)"
+                )
+            else:
+                # Validate path existence and permissions
+                path = Path(base_path)
+                if not path.exists():
+                    result.add_error(
+                        f"BASE_PATH from environment does not exist: {base_path}\n"
+                        f"Remediation: Create the directory with: mkdir -p {base_path}"
+                    )
+                elif not path.is_dir():
+                    result.add_error(
+                        f"BASE_PATH from environment is not a directory: {base_path}\n"
+                        "Remediation: Specify a valid directory path"
+                    )
+                else:
+                    # Check write permissions
+                    if not os.access(path, os.W_OK):
+                        result.add_error(
+                            f"BASE_PATH from environment is not writable: {base_path}\n"
+                            f"Remediation: Fix permissions with: sudo chmod u+w {base_path}"
+                        )
+                    # Check read permissions
+                    if not os.access(path, os.R_OK):
+                        result.add_error(
+                            f"BASE_PATH from environment is not readable: {base_path}\n"
+                            f"Remediation: Fix permissions with: sudo chmod u+r {base_path}"
+                        )
+                    if result.valid:
+                        result.add_warning(f"Using BASE_PATH from environment: {base_path}")
+
+        # Validate CONFIG_PATH if present
+        if "CONFIG_PATH" in env_vars:
+            config_path = env_vars["CONFIG_PATH"]
+            if not isinstance(config_path, str):
+                result.add_error(
+                    f"Invalid CONFIG_PATH type in environment: {type(config_path).__name__}\n"
+                    "Remediation: CONFIG_PATH must be a string path"
+                )
+            elif config_path:
+                path = Path(config_path)
+                if path.exists() and not path.is_dir():
+                    result.add_error(
+                        f"CONFIG_PATH from environment exists but is not a directory: {config_path}\n"
+                        "Remediation: Remove the file or choose a different path"
+                    )
+                elif not path.exists():
+                    result.add_warning(
+                        f"CONFIG_PATH from environment does not exist and will be created: {config_path}"
+                    )
+
+        # Validate DATA_PATH if present
+        if "DATA_PATH" in env_vars:
+            data_path = env_vars["DATA_PATH"]
+            if not isinstance(data_path, str):
+                result.add_error(
+                    f"Invalid DATA_PATH type in environment: {type(data_path).__name__}\n"
+                    "Remediation: DATA_PATH must be a string path"
+                )
+            elif data_path:
+                path = Path(data_path)
+                if path.exists() and not path.is_dir():
+                    result.add_error(
+                        f"DATA_PATH from environment exists but is not a directory: {data_path}\n"
+                        "Remediation: Remove the file or choose a different path"
+                    )
+                elif not path.exists():
+                    result.add_warning(
+                        f"DATA_PATH from environment does not exist and will be created: {data_path}"
+                    )
+
+        # Validate COMPOSE_FILE_PATH if present
+        if "COMPOSE_FILE_PATH" in env_vars:
+            compose_path = env_vars["COMPOSE_FILE_PATH"]
+            if not isinstance(compose_path, str):
+                result.add_error(
+                    f"Invalid COMPOSE_FILE_PATH type in environment: {type(compose_path).__name__}\n"
+                    "Remediation: COMPOSE_FILE_PATH must be a string path"
+                )
+            elif compose_path:
+                path = Path(compose_path)
+                # Check if parent directory exists
+                if not path.parent.exists():
+                    result.add_error(
+                        f"Parent directory for COMPOSE_FILE_PATH does not exist: {path.parent}\n"
+                        f"Remediation: Create the directory with: mkdir -p {path.parent}"
+                    )
+                elif path.exists() and path.is_dir():
+                    result.add_error(
+                        f"COMPOSE_FILE_PATH from environment is a directory: {compose_path}\n"
+                        "Remediation: Specify a file path, not a directory"
+                    )
+
+        # Validate port ranges if any port-related variables are present
+        # (This is a placeholder for future port-related environment variables)
+        port_vars = {k: v for k, v in env_vars.items() if "PORT" in k.upper()}
+        if port_vars:
+            for var_name, port_value in port_vars.items():
+                if isinstance(port_value, int):
+                    if port_value < 1 or port_value > 65535:
+                        result.add_error(
+                            f"Invalid port value in environment variable {var_name}: {port_value}\n"
+                            "Remediation: Use a port between 1 and 65535"
+                        )
+                    elif port_value < 1024:
+                        result.add_warning(
+                            f"Port {port_value} in {var_name} is in privileged range (< 1024)\n"
+                            "This may require root privileges or special capabilities"
+                        )
+
+        return result
+
+    def _is_valid_timezone(self, tz: str) -> bool:
+        """
+        Check if a timezone string is valid.
+
+        Args:
+            tz: Timezone string to validate
+
+        Returns:
+            True if timezone is valid, False otherwise
+        """
+        try:
+            from zoneinfo import ZoneInfo
+
+            # Try to create a ZoneInfo object
+            ZoneInfo(tz)
+            return True
+        except Exception:
+            # If zoneinfo fails, try pytz as fallback
+            try:
+                import pytz
+
+                pytz.timezone(tz)
+                return True
+            except Exception:
+                return False
 
     def validate_complete_stack(self, stack: StackConfig) -> ValidationResult:
         """
