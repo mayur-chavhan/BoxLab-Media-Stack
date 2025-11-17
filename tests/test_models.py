@@ -270,6 +270,162 @@ class TestConfiguration:
         assert "radarr" in selected
         assert "bazarr" not in selected
 
+    def test_from_env_with_all_values(self):
+        """Test creating Configuration from environment variables."""
+        from unittest.mock import Mock
+
+        # Create mock environment loader
+        env_loader = Mock()
+        env_loader.get.side_effect = lambda key: {
+            "PUID": 1001,
+            "PGID": 1001,
+            "TZ": "America/Los_Angeles",
+            "BASE_PATH": "/mnt/media",
+            "CONFIG_PATH": "/mnt/media/configs",
+            "DATA_PATH": "/mnt/media/data",
+        }.get(key)
+
+        config = Configuration.from_env(env_loader)
+
+        assert config.puid == 1001
+        assert config.pgid == 1001
+        assert config.timezone == "America/Los_Angeles"
+        assert config.paths.base_path == "/mnt/media"
+        assert config.paths.config_path == "/mnt/media/configs"
+        assert config.paths.data_path == "/mnt/media/data"
+
+    def test_from_env_with_defaults(self):
+        """Test creating Configuration from environment with defaults."""
+        import os
+        from unittest.mock import Mock
+
+        # Create mock environment loader that returns None for PUID/PGID
+        env_loader = Mock()
+        env_loader.get.side_effect = lambda key: {
+            "BASE_PATH": "/mnt/storage",
+        }.get(key)
+
+        config = Configuration.from_env(env_loader)
+
+        # Should use current user's UID/GID
+        assert config.puid == os.getuid()
+        assert config.pgid == os.getgid()
+        assert config.timezone == "UTC"
+        assert config.paths.base_path == "/mnt/storage"
+
+    def test_from_env_timezone_alternative(self):
+        """Test that TIMEZONE env var works as alternative to TZ."""
+        from unittest.mock import Mock
+
+        env_loader = Mock()
+        env_loader.get.side_effect = lambda key: {
+            "BASE_PATH": "/mnt/storage",
+            "TIMEZONE": "Europe/London",
+        }.get(key)
+
+        config = Configuration.from_env(env_loader)
+
+        assert config.timezone == "Europe/London"
+
+    def test_from_env_missing_base_path(self):
+        """Test that from_env raises error when BASE_PATH is missing."""
+        from unittest.mock import Mock
+
+        env_loader = Mock()
+        env_loader.get.return_value = None
+
+        with pytest.raises(ValueError, match="BASE_PATH environment variable is required"):
+            Configuration.from_env(env_loader)
+
+    def test_merge_with_env_overrides_all(self):
+        """Test merging configuration with environment variables."""
+        from unittest.mock import Mock
+
+        # Create initial configuration
+        config = Configuration(
+            puid=1000,
+            pgid=1000,
+            timezone="UTC",
+            paths=PathConfig(base_path="/tmp"),
+        )
+
+        # Add a service
+        config.add_service(ServiceConfig(name="sonarr", port=8989))
+
+        # Create mock environment loader with override values
+        env_loader = Mock()
+        env_loader.get.side_effect = lambda key: {
+            "PUID": 2000,
+            "PGID": 2000,
+            "TZ": "America/New_York",
+            "BASE_PATH": "/mnt/storage",
+            "CONFIG_PATH": "/mnt/storage/config",
+            "DATA_PATH": "/mnt/storage/data",
+        }.get(key)
+
+        merged = config.merge_with_env(env_loader)
+
+        # Check that environment values override
+        assert merged.puid == 2000
+        assert merged.pgid == 2000
+        assert merged.timezone == "America/New_York"
+        assert merged.paths.base_path == "/mnt/storage"
+        assert merged.paths.config_path == "/mnt/storage/config"
+        assert merged.paths.data_path == "/mnt/storage/data"
+
+        # Check that services are preserved
+        assert "sonarr" in merged.services
+        assert merged.services["sonarr"].port == 8989
+
+    def test_merge_with_env_partial_override(self):
+        """Test merging with only some environment variables set."""
+        from unittest.mock import Mock
+
+        config = Configuration(
+            puid=1000,
+            pgid=1000,
+            timezone="UTC",
+            paths=PathConfig(base_path="/tmp"),
+        )
+
+        # Only override PUID and timezone
+        env_loader = Mock()
+        env_loader.get.side_effect = lambda key: {
+            "PUID": 1500,
+            "TZ": "Europe/Paris",
+        }.get(key)
+
+        merged = config.merge_with_env(env_loader)
+
+        # Check that only specified values are overridden
+        assert merged.puid == 1500
+        assert merged.pgid == 1000  # Not overridden
+        assert merged.timezone == "Europe/Paris"
+        assert merged.paths.base_path == "/tmp"  # Not overridden
+
+    def test_merge_with_env_no_overrides(self):
+        """Test merging when no environment variables are set."""
+        from unittest.mock import Mock
+
+        config = Configuration(
+            puid=1000,
+            pgid=1000,
+            timezone="UTC",
+            paths=PathConfig(base_path="/tmp"),
+        )
+
+        # No environment variables set
+        env_loader = Mock()
+        env_loader.get.return_value = None
+
+        merged = config.merge_with_env(env_loader)
+
+        # All values should remain the same
+        assert merged.puid == 1000
+        assert merged.pgid == 1000
+        assert merged.timezone == "UTC"
+        assert merged.paths.base_path == "/tmp"
+
 
 class TestValidationResult:
     """Test suite for ValidationResult model."""

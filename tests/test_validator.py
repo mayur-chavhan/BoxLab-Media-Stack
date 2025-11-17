@@ -153,3 +153,165 @@ class TestConfigurationValidator:
 
             assert result.valid is False
             assert any("No services are enabled" in error for error in result.errors)
+
+    def test_validate_env_config_valid_puid_pgid(self):
+        """Test environment config validation with valid PUID/PGID."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"PUID": 1000, "PGID": 1000}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is True
+        assert len(result.errors) == 0
+
+    def test_validate_env_config_invalid_puid_type(self):
+        """Test environment config validation with invalid PUID type."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"PUID": "not_an_int"}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid PUID type" in error for error in result.errors)
+
+    def test_validate_env_config_negative_puid(self):
+        """Test environment config validation with negative PUID."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"PUID": -1}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid PUID value" in error for error in result.errors)
+
+    def test_validate_env_config_invalid_pgid_type(self):
+        """Test environment config validation with invalid PGID type."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"PGID": "not_an_int"}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid PGID type" in error for error in result.errors)
+
+    def test_validate_env_config_negative_pgid(self):
+        """Test environment config validation with negative PGID."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"PGID": -1}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid PGID value" in error for error in result.errors)
+
+    def test_validate_env_config_valid_timezone(self):
+        """Test environment config validation with valid timezone."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"TZ": "America/New_York"}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is True
+        assert len(result.errors) == 0
+
+    def test_validate_env_config_invalid_timezone_type(self):
+        """Test environment config validation with invalid timezone type."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"TZ": 123}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid timezone type" in error for error in result.errors)
+
+    def test_validate_env_config_empty_timezone(self):
+        """Test environment config validation with empty timezone."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"TZ": ""}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Empty timezone" in error for error in result.errors)
+
+    def test_validate_env_config_invalid_timezone_format(self):
+        """Test environment config validation with invalid timezone format."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"TZ": "Invalid/Timezone"}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid timezone format" in error for error in result.errors)
+
+    def test_validate_env_config_valid_base_path(self):
+        """Test environment config validation with valid BASE_PATH."""
+        validator = ConfigurationValidator()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_vars = {"BASE_PATH": tmpdir}
+            result = validator.validate_env_config(env_vars)
+
+            assert result.valid is True
+            assert len(result.errors) == 0
+
+    def test_validate_env_config_invalid_base_path_type(self):
+        """Test environment config validation with invalid BASE_PATH type."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"BASE_PATH": 123}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid BASE_PATH type" in error for error in result.errors)
+
+    def test_validate_env_config_nonexistent_base_path(self):
+        """Test environment config validation with nonexistent BASE_PATH."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"BASE_PATH": "/nonexistent/path/that/does/not/exist"}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("does not exist" in error for error in result.errors)
+
+    def test_validate_env_config_base_path_not_directory(self):
+        """Test environment config validation with BASE_PATH that is not a directory."""
+        validator = ConfigurationValidator()
+
+        with tempfile.NamedTemporaryFile() as tmpfile:
+            env_vars = {"BASE_PATH": tmpfile.name}
+            result = validator.validate_env_config(env_vars)
+
+            assert result.valid is False
+            assert any("not a directory" in error for error in result.errors)
+
+    def test_validate_env_config_invalid_port_range(self):
+        """Test environment config validation with invalid port range."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"SONARR_PORT": 70000}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is False
+        assert any("Invalid port value" in error for error in result.errors)
+
+    def test_validate_env_config_privileged_port(self):
+        """Test environment config validation with privileged port."""
+        validator = ConfigurationValidator()
+
+        env_vars = {"SONARR_PORT": 80}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is True
+        assert any("privileged range" in warning for warning in result.warnings)
+
+    def test_validate_env_config_empty(self):
+        """Test environment config validation with empty env vars."""
+        validator = ConfigurationValidator()
+
+        env_vars = {}
+        result = validator.validate_env_config(env_vars)
+
+        assert result.valid is True
+        assert len(result.errors) == 0

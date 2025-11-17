@@ -173,6 +173,44 @@ class TestConfigWizardScreen:
         # Should return a valid timezone or UTC as fallback
         assert timezone in ["UTC"] or "/" in timezone  # Valid timezones have / in them
 
+    @pytest.mark.asyncio
+    async def test_wizard_uses_environment_defaults(self, controller, sample_configuration):
+        """Test wizard uses environment defaults when available."""
+        from unittest.mock import patch
+        
+        # Mock environment defaults
+        env_defaults = {
+            "puid": 1001,
+            "pgid": 1001,
+            "timezone": "America/New_York",
+            "base_path": "/mnt/media",
+        }
+        
+        with patch.object(controller, "get_env_defaults", return_value=env_defaults):
+            screen = ConfigWizardScreen(controller, sample_configuration)
+            
+            # Check that environment defaults are used
+            assert screen._detected_puid == 1001
+            assert screen._detected_pgid == 1001
+            assert screen._detected_timezone == "America/New_York"
+            assert screen._detected_base_path == "/mnt/media"
+            assert screen._env_defaults == env_defaults
+
+    @pytest.mark.asyncio
+    async def test_wizard_falls_back_to_detection_without_env(self, controller, sample_configuration):
+        """Test wizard falls back to auto-detection when no environment defaults."""
+        from unittest.mock import patch
+        
+        # Mock empty environment defaults
+        with patch.object(controller, "get_env_defaults", return_value={}):
+            screen = ConfigWizardScreen(controller, sample_configuration)
+            
+            # Check that auto-detection is used
+            assert screen._detected_puid >= 0  # Should be detected from system
+            assert screen._detected_pgid >= 0  # Should be detected from system
+            assert isinstance(screen._detected_timezone, str)
+            assert screen._env_defaults == {}
+
 
 class TestPathConfigurationStep:
     """Tests for the PathConfigurationStep widget."""
@@ -415,3 +453,63 @@ class TestDeploymentWorkflowIntegration:
         assert stack_config.configuration.puid == 1000
         assert stack_config.configuration.pgid == 1000
         assert stack_config.compose_path == compose_path
+
+
+class TestBaseConfigurationStepWithEnv:
+    """Tests for BaseConfigurationStep with environment indicators."""
+
+    def test_base_config_step_with_env_indicators(self):
+        """Test base configuration step shows environment indicators."""
+        from_env = {
+            "puid": True,
+            "pgid": True,
+            "timezone": False,
+        }
+        
+        step = BaseConfigurationStep(
+            puid=1001,
+            pgid=1001,
+            timezone="UTC",
+            from_env=from_env,
+        )
+        
+        assert step.from_env == from_env
+        assert step.puid == 1001
+        assert step.pgid == 1001
+        assert step.timezone == "UTC"
+
+    def test_base_config_step_without_env_indicators(self):
+        """Test base configuration step without environment indicators."""
+        step = BaseConfigurationStep(
+            puid=1000,
+            pgid=1000,
+            timezone="UTC",
+        )
+        
+        assert step.from_env == {}
+        assert step.puid == 1000
+        assert step.pgid == 1000
+
+
+class TestPathConfigurationStepWithEnv:
+    """Tests for PathConfigurationStep with environment indicators."""
+
+    def test_path_config_step_with_env_indicator(self):
+        """Test path configuration step shows environment indicator."""
+        step = PathConfigurationStep(
+            base_path="/mnt/media",
+            from_env=True,
+        )
+        
+        assert step.from_env is True
+        assert step.base_path == "/mnt/media"
+
+    def test_path_config_step_without_env_indicator(self):
+        """Test path configuration step without environment indicator."""
+        step = PathConfigurationStep(
+            base_path="/tmp/test",
+            from_env=False,
+        )
+        
+        assert step.from_env is False
+        assert step.base_path == "/tmp/test"

@@ -424,3 +424,125 @@ def test_restart_service(controller, mock_docker_manager):
     
     assert result.success is True
     mock_docker_manager.restart_service.assert_called_once_with("sonarr")
+
+
+def test_env_loader_initialized(controller):
+    """Test that environment loader is initialized."""
+    assert controller._env_loader is not None
+    assert controller.env_loader is not None
+
+
+def test_get_env_defaults(controller):
+    """Test getting environment defaults."""
+    with patch.object(controller._env_loader, "get_all") as mock_get_all:
+        mock_get_all.return_value = {
+            "PUID": 1001,
+            "PGID": 1001,
+            "TZ": "America/Los_Angeles",
+            "BASE_PATH": "/data",
+            "STACK_NAME": "my-stack",
+        }
+        
+        defaults = controller.get_env_defaults()
+        
+        assert defaults["puid"] == 1001
+        assert defaults["pgid"] == 1001
+        assert defaults["timezone"] == "America/Los_Angeles"
+        assert defaults["base_path"] == "/data"
+        assert defaults["stack_name"] == "my-stack"
+
+
+def test_get_env_defaults_with_timezone_alternative(controller):
+    """Test getting environment defaults with TIMEZONE instead of TZ."""
+    with patch.object(controller._env_loader, "get_all") as mock_get_all:
+        mock_get_all.return_value = {
+            "TIMEZONE": "Europe/London",
+        }
+        
+        defaults = controller.get_env_defaults()
+        
+        assert defaults["timezone"] == "Europe/London"
+
+
+def test_get_env_defaults_empty(controller):
+    """Test getting environment defaults when no env vars are set."""
+    with patch.object(controller._env_loader, "get_all") as mock_get_all:
+        mock_get_all.return_value = {}
+        
+        defaults = controller.get_env_defaults()
+        
+        assert defaults == {}
+
+
+def test_load_configuration_merges_env(controller, sample_stack_config):
+    """Test that loading configuration merges environment variables."""
+    # Save configuration
+    controller.save_configuration(sample_stack_config)
+    
+    # Mock environment loader to return different values
+    with patch.object(controller._env_loader, "get") as mock_get:
+        def get_side_effect(key):
+            env_values = {
+                "PUID": 2000,
+                "PGID": 2000,
+                "TZ": "Europe/Paris",
+            }
+            return env_values.get(key)
+        
+        mock_get.side_effect = get_side_effect
+        
+        # Load configuration
+        loaded = controller.load_configuration("test-stack")
+        
+        # Verify environment values were merged
+        assert loaded.configuration.puid == 2000
+        assert loaded.configuration.pgid == 2000
+        assert loaded.configuration.timezone == "Europe/Paris"
+
+
+def test_load_or_create_configuration_loads_existing(controller, sample_stack_config):
+    """Test load_or_create_configuration loads existing config."""
+    # Save configuration
+    controller.save_configuration(sample_stack_config)
+    
+    # Load or create
+    loaded = controller.load_or_create_configuration("test-stack")
+    
+    assert loaded is not None
+    assert loaded.name == "test-stack"
+
+
+def test_load_or_create_configuration_creates_from_env(controller):
+    """Test load_or_create_configuration creates config from environment."""
+    with patch.object(controller._env_loader, "get") as mock_get:
+        def get_side_effect(key):
+            env_values = {
+                "PUID": 1000,
+                "PGID": 1000,
+                "TZ": "UTC",
+                "BASE_PATH": "/mnt/data",
+            }
+            return env_values.get(key)
+        
+        mock_get.side_effect = get_side_effect
+        
+        # Load or create (no saved config exists)
+        created = controller.load_or_create_configuration("new-stack")
+        
+        assert created is not None
+        assert created.name == "new-stack"
+        assert created.configuration.puid == 1000
+        assert created.configuration.pgid == 1000
+        assert created.configuration.timezone == "UTC"
+        assert created.configuration.paths.base_path == "/mnt/data"
+
+
+def test_load_or_create_configuration_returns_none_without_env(controller):
+    """Test load_or_create_configuration returns None when no config or env exists."""
+    with patch.object(controller._env_loader, "get") as mock_get:
+        mock_get.return_value = None
+        
+        # Load or create (no saved config, no env vars)
+        result = controller.load_or_create_configuration("nonexistent-stack")
+        
+        assert result is None
